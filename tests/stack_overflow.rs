@@ -5,7 +5,7 @@
 use core::panic::PanicInfo;
 
 use lazy_static::lazy_static;
-use meowl::{exit_qemu, init, serial_println};
+use meowl::{exit_qemu, serial_println};
 use x86_64::structures::idt::{InterruptDescriptorTable, InterruptStackFrame};
 
 lazy_static! {

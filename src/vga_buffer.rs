@@ -164,7 +164,7 @@ fn test_println_output() {
 
     interrupts::without_interrupts(|| {
         println!("{}", s);
-        for (i, c) in s.chars().enumerate() {
+        for (_i, _c) in s.chars().enumerate() {
             let mut writer = WRITER.lock();
             writeln!(writer, "\n{}", s).expect("writeln failed");
             for (i, c) in s.chars().enumerate() {
