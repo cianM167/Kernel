@@ -1,3 +1,5 @@
+use core::sync::atomic::{AtomicU64, Ordering};
+
 use spin::Mutex;
 use x86_64::registers::control::Cr2;
 use x86_64::structures::idt::PageFaultErrorCode;
@@ -12,6 +14,8 @@ use spin;
 
 pub const PIC_1_OFFSET: u8 = 32;
 pub const PIC_2_OFFSET: u8 = PIC_1_OFFSET + 8;
+
+pub static TIMER: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Debug, Clone, Copy)]
 #[repr(u8)]
@@ -60,7 +64,7 @@ pub fn init_idt() {
 extern "x86-interrupt" fn timer_interrupt_handler(
     _stack_frame: InterruptStackFrame
 ) {
-    // print!(".");
+    TIMER.fetch_add(1, Ordering::Relaxed);
 
     unsafe {
         PICS.lock()

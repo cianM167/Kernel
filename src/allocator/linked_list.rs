@@ -1,4 +1,6 @@
-use core::{mem};
+use core::{alloc::{GlobalAlloc, Layout}, mem, ptr};
+
+use crate::allocator::bump::Locked;
 
 use super::align_up;
 
@@ -39,9 +41,11 @@ impl LinkedListAllocator {
     }
 
     unsafe fn add_free_region(&mut self, addr: usize, size: usize) {
+        // ensure that the freed region is capable of holding ListNode
         assert_eq!(align_up(addr, mem::align_of::<ListNode>()), addr);
         assert!(size >= mem::size_of::<ListNode>());
 
+        // create a new list node and append it at the start of the list
         let mut node = ListNode::new(size);
         node.next = self.head.next.take();
         let node_ptr = addr as *mut ListNode;
@@ -55,7 +59,7 @@ impl LinkedListAllocator {
         &mut self, 
         size: usize, 
         align: usize
-    ) -> Option<&'static mut ListNode, usize> {
+    ) -> Option<(&'static mut ListNode, usize)> {
         let mut current = &mut self.head;
 
         while let Some(ref mut region) = current.next {
@@ -90,5 +94,42 @@ impl LinkedListAllocator {
         }
 
         Ok(alloc_start)
+    }
+
+    fn size_align(layout: Layout) -> (usize, usize) {
+        let layout = layout
+            .align_to(mem::align_of::<ListNode>())
+            .expect("adjusting alignment failed")
+            .pad_to_align();
+        let size = layout.size().max(mem::size_of::<ListNode>());
+        (size, layout.align())
+    }
+}
+
+unsafe impl GlobalAlloc for Locked<LinkedListAllocator> {
+    unsafe fn alloc(&self, layout: core::alloc::Layout) -> *mut u8 {
+        let (size, align) = LinkedListAllocator::size_align(layout);
+        let mut allocator = self.lock();
+
+        if let Some((region, alloc_start)) = allocator.find_region(size, align) {
+            let alloc_end = alloc_start.checked_add(size).expect("overflow");
+            let excess_size = region.end_addr() - alloc_end;
+            if excess_size > 0 {
+                unsafe {
+                    allocator.add_free_region(alloc_end, excess_size);
+                }
+            }
+            alloc_start as *mut u8
+        } else {
+            ptr::null_mut()
+        }
+    }
+
+    unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
+        let (_, size) = LinkedListAllocator::size_align(layout);
+
+        unsafe {
+            self.lock().add_free_region(ptr as usize, size);
+        }
     }
 }

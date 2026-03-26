@@ -11,11 +11,11 @@
 // run in qemu
 // qemu-system-x86_64 -drive format=raw,file=target/x86_64-meowl_os/release/bootimage-meowl.bin
 
-use core::{panic::PanicInfo};
+use core::{panic::PanicInfo, sync::atomic::Ordering};
 
 use alloc::{boxed::Box, vec, rc::Rc, vec::Vec};
 use bootloader::{BootInfo, entry_point};
-use meowl::{allocator, hlt_loop, memory::BootInfoFrameAllocator};
+use meowl::{allocator, hlt_loop, interrupts::TIMER, memory::BootInfoFrameAllocator, task::{Task, simple_executor::SimpleExecutor}};
 use x86_64::{VirtAddr, registers::control::Cr3, structures::paging::{Page, PageTable, Translate}};
 
 extern crate alloc;
@@ -43,7 +43,7 @@ pub fn exit_qemu(exit_code: QemuExitCode) {
 entry_point!(kernel_main);//telling bootloader what our entrypoint is 
 
 fn kernel_main(boot_info: &'static BootInfo) -> ! {
-    println!("Hello I am the kernel :)");
+    println!("Hello I am the kernel\n        \\\n         \\\n            _~^~^~_\n        \\) /  o o  \\ (/\n          '_   -   _'\n          / '-----' \\");
 
     meowl::init();
 
@@ -53,25 +53,12 @@ fn kernel_main(boot_info: &'static BootInfo) -> ! {
         BootInfoFrameAllocator::init(&boot_info.memory_map)
     };
 
-
-
     allocator::init_heap(&mut mapper, &mut frame_allocator)
         .expect("heap initialization failed");
 
-    let heap_value = Box::new(42);
-    println!("heap_value at {:p}", heap_value);
-
-    let mut vec = Vec::new();
-    for i in 0..500 {
-        vec.push(i);
-    }
-    println!("vec at {:p}", vec.as_slice());
-
-    let reference_counted = Rc::new(vec![1, 2, 3]);
-    let cloned_reference = reference_counted.clone();
-    println!("current reference count is {}", Rc::strong_count(&cloned_reference));
-    core::mem::drop(reference_counted);
-    println!("reference count is {} now", Rc::strong_count(&cloned_reference));
+    let mut executor = SimpleExecutor::new();
+    executor.spawn(Task::new(example_task()));
+    executor.run();
 
     #[cfg(test)]
     test_main();
@@ -91,4 +78,13 @@ fn panic(info: &PanicInfo) -> ! {// eventually will display message
 #[panic_handler]
 fn panic(info: &PanicInfo) -> ! {
     meowl::test_panic_handler(info)
+}
+
+async fn async_number() -> u32 {
+    42
+}
+
+async fn example_task() {
+    let number = async_number().await;
+    println!("async number: {}", number);
 }
