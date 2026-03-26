@@ -6,7 +6,8 @@ pub fn init_syscall() {
     unsafe {
         Efer::update(|flags| {
             *flags = EferFlags::SYSTEM_CALL_EXTENSIONS;
-        })
+        });
+        LStar::write(syscall_entry as u64);
     }
 }
 
