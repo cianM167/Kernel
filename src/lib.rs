@@ -11,6 +11,9 @@ extern crate alloc;
 
 #[cfg(test)]
 use bootloader::{BootInfo, entry_point};
+use spin::Mutex;
+
+use crate::allocator::MemoryManager;
 
 pub mod serial;
 pub mod vga_buffer;
@@ -21,6 +24,8 @@ pub mod allocator;
 pub mod task;
 pub mod threads;
 pub mod syscall;
+
+pub static MEMORY: Mutex<Option<MemoryManager>> = Mutex::new(None);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u32)]

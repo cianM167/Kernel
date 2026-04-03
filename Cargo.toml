@@ -10,6 +10,9 @@ bench = false
 
 [dependencies]
 bootloader = { version = "0.9", features = ["map_physical_memory"] }
+conquer-once = { version = "0.4.0", default-features = false }
+crossbeam-queue = { version = "0.3.12", default-features = false, features = ["alloc"]}
+futures-util = { version = "0.3.32", default-features = false, features = ["alloc"] }
 lazy_static = { version = "1.5.0" , features = ["spin_no_std"] }
 linked_list_allocator = "0.10.5"
 pc-keyboard = "0.8.0"
@@ -35,3 +38,6 @@ test-success-exit-code = 33
 [[test]]
 name = "stack_overflow"
 harness = false
+
+[build-dependencies]
+cc = "1.0"

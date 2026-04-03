@@ -11,12 +11,13 @@
 // run in qemu
 // qemu-system-x86_64 -drive format=raw,file=target/x86_64-meowl_os/release/bootimage-meowl.bin
 
-use core::{panic::PanicInfo, sync::atomic::Ordering};
+use core::{panic::PanicInfo, sync::atomic::Ordering, arch::asm};
 
 use alloc::{boxed::Box, vec, rc::Rc, vec::Vec};
 use bootloader::{BootInfo, entry_point};
-use meowl::{allocator, hlt_loop, interrupts::TIMER, memory::BootInfoFrameAllocator, task::{Task, simple_executor::SimpleExecutor}};
-use x86_64::{VirtAddr, registers::control::Cr3, structures::paging::{Page, PageTable, Translate}};
+use meowl::{MEMORY, allocator::{self, MemoryManager, with_memory}, hlt_loop, interrupts::TIMER, memory::BootInfoFrameAllocator, task::{Task, executor::Executor, keyboard, simple_executor::SimpleExecutor}, threads::{Thread, scheduler::Scheduler}};
+use spin::{Mutex};
+use x86_64::{VirtAddr, registers::control::{Cr3, Cr3Flags}, structures::paging::{Mapper, OffsetPageTable, Page, PageTable, Translate}};
 
 extern crate alloc;
 
@@ -43,25 +44,40 @@ pub fn exit_qemu(exit_code: QemuExitCode) {
 entry_point!(kernel_main);//telling bootloader what our entrypoint is 
 
 fn kernel_main(boot_info: &'static BootInfo) -> ! {
+    #[cfg(test)]
+    test_main();
+
     println!("Hello I am the kernel\n        \\\n         \\\n            _~^~^~_\n        \\) /  o o  \\ (/\n          '_   -   _'\n          / '-----' \\");
 
     meowl::init();
 
     let phys_mem_offset = VirtAddr::new(boot_info.physical_memory_offset);
-    let mut mapper = unsafe { memory::init(phys_mem_offset) };
-    let mut frame_allocator = unsafe {
-        BootInfoFrameAllocator::init(&boot_info.memory_map)
-    };
+    {// ignore awful scopejitsu
+        let mut memory = MEMORY.lock();
 
-    allocator::init_heap(&mut mapper, &mut frame_allocator)
-        .expect("heap initialization failed");
+        *memory = Some(unsafe {
+            MemoryManager::new(phys_mem_offset, &boot_info.memory_map)
+        });
+    }
+    
+    let entry = test as u64;
+    
+    with_memory(|memory| {
+        memory.init_heap().expect("heap initialization failed");
+    });
 
-    let mut executor = SimpleExecutor::new();
+    // unsafe { Cr3::write(pml4_frame, Cr3Flags::empty()) };
+
+    let mut scheduler = Scheduler::new();
+
+    scheduler.spawn(Thread::new(entry));
+    scheduler.schedule();
+
+
+    let mut executor = Executor::new();
     executor.spawn(Task::new(example_task()));
+    executor.spawn(Task::new(keyboard::print_keypresses()));
     executor.run();
-
-    #[cfg(test)]
-    test_main();
 
     println!("I didnt crash Yippee!!!!");
     hlt_loop();
@@ -88,3 +104,13 @@ async fn example_task() {
     let number = async_number().await;
     println!("async number: {}", number);
 }
+
+fn test() -> ! {
+    loop {
+        unsafe {
+            core::arch::asm!("nop");
+        }
+    }
+}
+
+

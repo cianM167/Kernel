@@ -1,0 +1,128 @@
+use alloc::{collections::VecDeque, vec::Vec};
+use x86_64::registers::control::{Cr3, Cr3Flags};
+
+use crate::{gdt::GDT, println, threads::{self, Context, Thread, ThreadState}};
+
+pub struct Scheduler {
+    threads: Vec<Thread>,
+    run_queue: VecDeque<usize>,
+    current: Option<usize>,
+}
+
+impl Scheduler {
+    pub fn new() -> Self {
+        Self { 
+            threads: Vec::new(),
+            run_queue: VecDeque::new(),
+            current: None,
+        }
+    }
+
+    pub fn spawn(&mut self, thread: Thread) {
+        let id = self.threads.len();
+        self.threads.push(thread);
+        self.run_queue.push_back(id);
+    }
+
+    pub fn schedule(&mut self) {
+        let current_id = self.current;
+
+        let next_id = match self.run_queue.pop_front() {
+            Some(id) => id,
+            None => return,
+        };
+
+        if let Some(id) = current_id {
+            let current = &mut self.threads[id];
+
+            if current.state == ThreadState::Running {
+                current.state = ThreadState::Ready;
+                self.run_queue.push_back(id);
+            }
+        }
+
+        let next: &mut Thread = &mut self.threads[next_id];
+        next.state = ThreadState::Running;
+
+        self.current = Some(next_id);
+
+        unsafe {
+            match current_id {
+                Some(id) => {
+                    let (old_ctx, new_ctx) = if id < next_id {
+                        let (left, right) = self.threads.split_at_mut(next_id);
+                        (&mut left[id].context, &right[0].context)
+                    } else {
+                        let (left, right) = self.threads.split_at_mut(id);
+                        (&mut right[0].context, &left[next_id].context)
+                    };
+
+                    // switch_context(old_ctx, new_ctx)
+                }
+                None => {
+                    let new_ctx = &self.threads[next_id].context;
+                    let frame = &self.threads[next_id].address_space;
+                    
+                    Cr3::write(*frame, Cr3Flags::empty());
+                    println!("trying to switch to user mode");
+                    enter_user_mode(new_ctx.rip, new_ctx.rsp);
+                }
+            }
+        }
+    }
+}
+
+unsafe extern "C" {
+    fn switch_context(old: *mut Context, new: *const Context);
+}
+
+unsafe fn start_first_thread(ctx: &Context) -> ! {
+    unsafe {
+        core::arch::asm!(
+            "mov rsp, [{0} + 0x00]",
+            "mov r15, [{0} + 0x08]",
+            "mov r14, [{0} + 0x10]",
+            "mov r13, [{0} + 0x18]",
+            "mov r12, [{0} + 0x20]",
+            "mov rbx, [{0} + 0x28]",
+            "mov rbp, [{0} + 0x30]",
+            "mov rax, [{0} + 0x38]",
+            "jmp rax",
+            in(reg) ctx,
+            options(noreturn)
+        )
+    }
+}
+
+pub unsafe fn enter_user_mode(entry: u64, user_stack: u64) -> ! {
+    let user_cs = (GDT.1.user_code.0 as u64) | 3;
+    let user_ds = (GDT.1.user_data.0 as u64) | 3;
+
+    unsafe {
+        core::arch::asm!(
+            "cli",
+
+            "mov ds, {user_ds}",
+            "mov es, {user_ds}",
+            "mov fs, {user_ds}",
+            "mov gs, {user_ds}",
+
+            "push {user_ss}",
+            "push {user_stack}",
+            "mov rax, 0x202",
+            "push rax",
+            "push {user_cs}",
+            "push {entry}",
+
+            "iretq",
+
+            user_ds = in(reg) user_ds,
+            user_ss = in(reg) user_ds,
+            user_cs = in(reg) user_cs,
+            entry = in(reg) entry,
+            user_stack = in(reg) user_stack,
+
+            options(noreturn)
+        );
+    };
+}

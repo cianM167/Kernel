@@ -1,4 +1,4 @@
-use x86_64::registers::model_specific::{Efer, EferFlags};
+use x86_64::{registers::model_specific::{Efer, EferFlags, LStar}, VirtAddr};
 
 use crate::println;
 
@@ -7,7 +7,7 @@ pub fn init_syscall() {
         Efer::update(|flags| {
             *flags = EferFlags::SYSTEM_CALL_EXTENSIONS;
         });
-        LStar::write(syscall_entry as u64);
+        LStar::write(VirtAddr::new(syscall_entry as u64));
     }
 }
 

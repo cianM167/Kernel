@@ -6,9 +6,11 @@ use x86_64::structures::gdt::SegmentSelector;
 
 pub const DOUBLE_FAULT_IST_INDEX: u16 = 0;
 
-struct Selectors {
+pub struct Selectors {
     code_selector: SegmentSelector,
     tss_selector: SegmentSelector,
+    pub user_data: SegmentSelector,
+    pub user_code: SegmentSelector,
 }
 
 lazy_static! {
@@ -27,11 +29,15 @@ lazy_static! {
 }
 
 lazy_static! {
-    static ref GDT: (GlobalDescriptorTable, Selectors) = {
+    pub static ref GDT: (GlobalDescriptorTable, Selectors) = {
         let mut gdt = GlobalDescriptorTable::new();
         let code_selector = gdt.append(Descriptor::kernel_code_segment());
         let tss_selector = gdt.append(Descriptor::tss_segment(&TSS));
-        (gdt, Selectors { code_selector, tss_selector })
+
+        let user_data = gdt.append(Descriptor::user_data_segment());
+        let user_code = gdt.append(Descriptor::user_code_segment());
+
+        (gdt, Selectors { code_selector, tss_selector, user_data, user_code })
     };
 }
 
