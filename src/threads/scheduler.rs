@@ -1,7 +1,7 @@
 use alloc::{collections::VecDeque, vec::Vec};
-use x86_64::registers::control::{Cr3, Cr3Flags};
+use x86_64::{VirtAddr, registers::control::{Cr3, Cr3Flags}};
 
-use crate::{gdt::GDT, println, threads::{self, Context, Thread, ThreadState}};
+use crate::{allocator::{debug_walk, with_memory}, gdt::GDT, println, threads::{self, Context, Thread, ThreadState}};
 
 pub struct Scheduler {
     threads: Vec<Thread>,
@@ -65,6 +65,17 @@ impl Scheduler {
                     
                     Cr3::write(*frame, Cr3Flags::empty());
                     println!("trying to switch to user mode");
+
+                    println!("RSP = {:#x}", new_ctx.rsp);
+
+                    // unsafe {
+                    //     *((new_ctx.rsp - 8) as *mut u64) = 0xdeadbeef;
+                    //     println!("value in RSP = {:#x}", *((new_ctx.rsp - 8) as *mut u64));
+                    // }
+
+                    // with_memory(|memory| {
+                    //     debug_walk(VirtAddr::new(0x400000), memory.phys_mem_offset);
+                    // })
                     enter_user_mode(new_ctx.rip, new_ctx.rsp);
                 }
             }
@@ -102,27 +113,27 @@ pub unsafe fn enter_user_mode(entry: u64, user_stack: u64) -> ! {
         core::arch::asm!(
             "cli",
 
-            "mov ds, {user_ds}",
-            "mov es, {user_ds}",
-            "mov fs, {user_ds}",
-            "mov gs, {user_ds}",
+            "mov ds, {ds}",
+            "mov es, {ds}",
+            "mov fs, {ds}",
+            "mov gs, {ds}",
 
-            "push {user_ss}",
-            "push {user_stack}",
+            "push {ss}",
+            "push {rsp}",
             "mov rax, 0x202",
             "push rax",
-            "push {user_cs}",
-            "push {entry}",
+            "push {cs}",
+            "push {rip}",
 
             "iretq",
 
-            user_ds = in(reg) user_ds,
-            user_ss = in(reg) user_ds,
-            user_cs = in(reg) user_cs,
-            entry = in(reg) entry,
-            user_stack = in(reg) user_stack,
+            ds = in(reg) user_ds,
+            ss = in(reg) user_ds,
+            rsp = in(reg) user_stack,
+            cs = in(reg) user_cs,
+            rip = in(reg) entry,
 
             options(noreturn)
         );
-    };
+    }
 }

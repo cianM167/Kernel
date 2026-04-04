@@ -2,9 +2,9 @@ use core::{alloc::GlobalAlloc, ptr::null_mut};
 
 use bootloader::bootinfo::MemoryMap;
 use linked_list_allocator::LockedHeap;
-use x86_64::{PhysAddr, VirtAddr, structures::paging::{FrameAllocator, Mapper, OffsetPageTable, Page, PageTable, PageTableFlags, PhysFrame, Size4KiB, frame, mapper::MapToError}};
+use x86_64::{PhysAddr, VirtAddr, registers::control::Cr3, structures::paging::{FrameAllocator, Mapper, OffsetPageTable, Page, PageTable, PageTableFlags, PhysFrame, Size4KiB, frame, mapper::MapToError}};
 
-use crate::{MEMORY, allocator::{bump::{BumpAllocator, Locked}, fixed_size_block::FixedSizeBlockAllocator, linked_list::LinkedListAllocator}, memory::{self, BootInfoFrameAllocator, active_level_4_table}};
+use crate::{MEMORY, allocator::{bump::{BumpAllocator, Locked}, fixed_size_block::FixedSizeBlockAllocator, linked_list::LinkedListAllocator}, memory::{self, BootInfoFrameAllocator, active_level_4_table}, println, serial_println};
 
 #[global_allocator]
 static ALLOCATOR: Locked<FixedSizeBlockAllocator> = Locked::new(FixedSizeBlockAllocator::new());
@@ -19,7 +19,7 @@ pub const HEAP_SIZE: usize = 100 * 1024; // 100 Kib
 pub const USER_CODE_START: u64 = 0x400000;
 
 pub struct MemoryManager {
-    phys_mem_offset: VirtAddr,
+    pub phys_mem_offset: VirtAddr,
     mapper: OffsetPageTable<'static>,
     frame_allocator: BootInfoFrameAllocator,
 }
@@ -72,7 +72,7 @@ impl MemoryManager {
         &mut self,
         page: Page,
         flags: PageTableFlags,
-        mut mapper: OffsetPageTable<'static>,
+        mapper: &mut OffsetPageTable<'static>,
     ) -> Result<(), MapToError<Size4KiB>> {
         let frame = self    
             .frame_allocator
@@ -104,17 +104,29 @@ impl MemoryManager {
     //     Ok(())
     // }
 
-    pub fn alloc_user_stack(&mut self, mapper: OffsetPageTable<'static>,) -> VirtAddr {
+    pub fn alloc_user_stack(&mut self, pml4: PhysFrame) -> VirtAddr {
+        let mut mapper = unsafe { self.mapper_for(pml4) };
+        
+        const STACK_PAGES: usize = 4;
+
         let stack_top = VirtAddr::new(0x0000_7FFF_FFFF_F000);
-        let stack_page = Page::containing_address(stack_top - 1);
+        let stack_start = stack_top - (STACK_PAGES as u64 * 4096);
 
         let flags = PageTableFlags::PRESENT
             | PageTableFlags::WRITABLE
-            | PageTableFlags::USER_ACCESSIBLE;
+            | PageTableFlags::USER_ACCESSIBLE
+            | PageTableFlags::NO_EXECUTE;
 
-        self.alloc_page(stack_page, flags, mapper).unwrap();
+        for i in 0..STACK_PAGES {
+            let addr = stack_start + (i as u64 * 4096);
+            let page = Page::containing_address(addr);
 
-        stack_top
+            self.alloc_page(page, flags, &mut mapper).unwrap();// FIXME
+        }
+
+        let aligned_top = VirtAddr::new(stack_top.as_u64() & !0xF);
+
+        aligned_top
     }
 
     pub fn new_address_space(&mut self) -> PhysFrame {
@@ -188,10 +200,12 @@ impl MemoryManager {
             .allocate_frame()
             .ok_or(MapToError::FrameAllocationFailed)?;
 
-        let flags = 
+        let mut flags = 
             PageTableFlags::PRESENT 
             | PageTableFlags::WRITABLE
             | PageTableFlags::USER_ACCESSIBLE;
+
+        flags.remove(PageTableFlags::NO_EXECUTE);
 
             unsafe {
                 mapper.map_to(page, frame, flags, &mut self.frame_allocator)?.flush();
@@ -213,7 +227,50 @@ impl MemoryManager {
     }
 }
 
+pub fn debug_walk(addr: VirtAddr, phys_mem_offset: VirtAddr) {
+    let (pml4_frame, _) = Cr3::read();
+    let mut table_ptr = phys_mem_offset + pml4_frame.start_address().as_u64();
 
+    let table: &PageTable = unsafe { &*(table_ptr.as_ptr()) };
+
+    let indices = [
+        addr.p4_index(),
+        addr.p3_index(),
+        addr.p2_index(),
+        addr.p1_index(),
+    ];
+
+    let names = ["PML4", "PDPT", "PD", "PT"];
+
+    let mut current = table;
+
+    for (i, &index) in indices.iter().enumerate() {
+        let entry = &current[index];
+
+        println!(
+            "{}[{:?}]: flags = {:?}",
+            names[i],
+            index,
+            entry.flags()
+        );
+
+        if entry.is_unused() {
+            println!("-> unused entry!");
+            return;
+        }
+
+        let frame = match entry.frame() {
+            Ok(f) => f,
+            Err(_) => {
+                println!("-> not a frame");
+                return;
+            }
+        };
+
+        let virt = phys_mem_offset + frame.start_address().as_u64();
+        current = unsafe { &*(virt.as_ptr()) };
+    }
+}
 
 fn align_up(addr: usize, align: usize) -> usize {
     (addr + align - 1) & !(align - 1)

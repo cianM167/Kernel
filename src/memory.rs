@@ -75,28 +75,3 @@ unsafe impl FrameAllocator<Size4KiB> for BootInfoFrameAllocator {
         frame
     }
 }
-
-pub const USER_STACK_TOP: usize = 0x0000_8000_0000_0000 - 0x1000;
-
-pub fn alloc_user_stack(
-    mapper: &mut impl Mapper<Size4KiB>,
-    frame_allocator: &mut impl FrameAllocator<Size4KiB>,
-) -> Result<VirtAddr, MapToError<Size4KiB>> {
-
-    let stack_top = VirtAddr::new(USER_STACK_TOP as u64);
-    let stack_page = Page::containing_address(stack_top - 1);
-
-    let frame = frame_allocator
-        .allocate_frame()
-        .ok_or(MapToError::FrameAllocationFailed)?;
-
-    let flags = PageTableFlags::PRESENT
-        | PageTableFlags::WRITABLE
-        | PageTableFlags::USER_ACCESSIBLE;
-
-    unsafe {
-        mapper.map_to(stack_page, frame, flags, frame_allocator)?.flush();
-    }
-
-    Ok(stack_top)
-}

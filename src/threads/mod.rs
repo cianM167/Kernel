@@ -1,5 +1,5 @@
 use alloc::boxed::Box;
-use x86_64::{VirtAddr, structures::paging::PhysFrame};
+use x86_64::{VirtAddr, registers::control::{Cr3, Cr3Flags}, structures::paging::PhysFrame};
 
 use crate::allocator::{USER_CODE_START, with_memory};
 
@@ -22,9 +22,19 @@ impl Thread {
                 // memory.map_user_pages(pml4_frame).expect("shat the bed");
                 memory.map_user_code(pml4_frame, VirtAddr::new(USER_CODE_START)).expect("shat þe bed");
 
+                let old = Cr3::read().0;
+
+                unsafe {
+                    Cr3::write(pml4_frame, Cr3Flags::empty());
+                }
+
                 memory.write_user_code(VirtAddr::new(USER_CODE_START));
+
+                unsafe {
+                    Cr3::write(old, Cr3Flags::empty());
+                }
                 
-                let stack_top = unsafe { memory.alloc_user_stack(memory.mapper_for(pml4_frame)) };
+                let stack_top = unsafe { memory.alloc_user_stack(pml4_frame) };
 
                 (pml4_frame, stack_top)
             });
