@@ -1,6 +1,7 @@
 use core::sync::atomic::{AtomicU64, Ordering};
 
 use spin::Mutex;
+use x86_64::PrivilegeLevel;
 use x86_64::registers::control::Cr2;
 use x86_64::structures::idt::PageFaultErrorCode;
 use x86_64::structures::idt::{InterruptDescriptorTable, InterruptStackFrame};
@@ -41,10 +42,19 @@ pub static PICS: Mutex<ChainedPics> = Mutex::new(unsafe {
 lazy_static! {
     static ref IDT: InterruptDescriptorTable = {
         let mut idt = InterruptDescriptorTable::new();
-        idt.breakpoint.set_handler_fn(breakpoint_handler);
+
+        idt.breakpoint.set_handler_fn(breakpoint_handler)
+            .set_privilege_level(PrivilegeLevel::Ring3);
         idt.page_fault.set_handler_fn(page_fault_handler);
+        idt.invalid_opcode.set_handler_fn(invalid_opcode_handler);
         unsafe {
+            idt.general_protection_fault.set_handler_fn(general_protection_fault_handler)
+                .set_stack_index(gdt::DOUBLE_FAULT_IST_INDEX);
+
             idt.double_fault.set_handler_fn(double_fault_handler)
+                .set_stack_index(gdt::DOUBLE_FAULT_IST_INDEX);
+
+            idt.stack_segment_fault.set_handler_fn(unknown_exception)
                 .set_stack_index(gdt::DOUBLE_FAULT_IST_INDEX);
         }
         idt[InterruptIndex::Timer.as_u8()]
@@ -52,6 +62,9 @@ lazy_static! {
 
         idt[InterruptIndex::Keyboard.as_u8()]
             .set_handler_fn(keyboard_interrupt_handler);
+
+        idt[0].set_handler_fn(unknown_exception_no_error);  // Divide by zero
+        idt[6].set_handler_fn(unknown_exception_no_error);  // Invalid opcode
 
         idt
     };
@@ -108,6 +121,40 @@ extern "x86-interrupt" fn page_fault_handler(
     println!("Accessed Address: {:?}", Cr2::read());
     println!("Error Code {:?}", error_code);
     println!("{:#?}", stack_frame);
+    hlt_loop();
+}
+
+extern "x86-interrupt" fn general_protection_fault_handler(
+    stack_frame: InterruptStackFrame,
+    error_code: u64
+) {
+    println!("GPF! Error code = {:#x}, RIP={:#x}", error_code, stack_frame.instruction_pointer.as_u64());
+    hlt_loop();
+}
+
+extern "x86-interrupt" fn invalid_opcode_handler(
+    stack_frame: InterruptStackFrame
+) {
+    println!("Invalid opcode at RIP={:#x}", stack_frame.instruction_pointer.as_u64());
+    hlt_loop();
+}
+
+
+extern "x86-interrupt" fn unknown_exception(
+    stack_frame: InterruptStackFrame, 
+    error_code: u64
+) {
+    println!("Unknown exception!");
+    println!("RIP={:#x}", stack_frame.instruction_pointer.as_u64());
+    println!("CS={:?}", stack_frame.code_segment);
+    println!("RFLAGS={:#x}", stack_frame.cpu_flags);
+    println!("Error code={:#x}", error_code);
+    hlt_loop();
+}
+
+extern "x86-interrupt" fn unknown_exception_no_error(stack_frame: InterruptStackFrame) {
+    println!("Unknown exception (no error code)!");
+    println!("RIP={:#x}", stack_frame.instruction_pointer.as_u64());
     hlt_loop();
 }
 

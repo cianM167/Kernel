@@ -221,15 +221,14 @@ impl MemoryManager {
         let ptr = virt.as_mut_ptr::<u8>();
 
         unsafe {
-            *ptr.add(0) = 0xEB;
-            *ptr.add(1) = 0xFE;
+            *ptr.add(0) = 0xCC;
         }
     }
 }
 
 pub fn debug_walk(addr: VirtAddr, phys_mem_offset: VirtAddr) {
     let (pml4_frame, _) = Cr3::read();
-    let mut table_ptr = phys_mem_offset + pml4_frame.start_address().as_u64();
+    let table_ptr = phys_mem_offset + pml4_frame.start_address().as_u64();
 
     let table: &PageTable = unsafe { &*(table_ptr.as_ptr()) };
 

@@ -41,7 +41,7 @@ pub fn exit_qemu(exit_code: QemuExitCode) {
     }
 }
 
-entry_point!(kernel_main);//telling bootloader what our entrypoint is 
+entry_point!(kernel_main);// telling bootloader what our entrypoint is 
 
 fn kernel_main(boot_info: &'static BootInfo) -> ! {
     #[cfg(test)]

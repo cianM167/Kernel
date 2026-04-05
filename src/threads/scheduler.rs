@@ -74,8 +74,9 @@ impl Scheduler {
                     // }
 
                     // with_memory(|memory| {
-                    //     debug_walk(VirtAddr::new(0x400000), memory.phys_mem_offset);
-                    // })
+                    //     debug_walk(VirtAddr::new(new_ctx.rsp - 8), memory.phys_mem_offset);
+                    // });
+
                     enter_user_mode(new_ctx.rip, new_ctx.rsp);
                 }
             }
@@ -108,6 +109,9 @@ unsafe fn start_first_thread(ctx: &Context) -> ! {
 pub unsafe fn enter_user_mode(entry: u64, user_stack: u64) -> ! {
     let user_cs = (GDT.1.user_code.0 as u64) | 3;
     let user_ds = (GDT.1.user_data.0 as u64) | 3;
+
+    // println!("USER RIP = {:#x}", entry);
+    // println!("USER RSP = {:#x}", user_stack);
 
     unsafe {
         core::arch::asm!(
