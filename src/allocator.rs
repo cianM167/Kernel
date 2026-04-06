@@ -13,6 +13,8 @@ pub mod bump;
 pub mod linked_list;
 pub mod fixed_size_block;
 
+pub const KERNEL_OFFSET: u64 = 0xffff_8000_0000_0000;
+
 pub const HEAP_START: usize = 0x4444_4444_0000;
 pub const HEAP_SIZE: usize = 100 * 1024; // 100 Kib
 
@@ -223,6 +225,25 @@ impl MemoryManager {
         unsafe {
             *ptr.add(0) = 0xCC;
         }
+    }
+
+    pub fn map_vga_buffer(&mut self, pml4: PhysFrame) -> Result<(), MapToError<Size4KiB>> {
+        let mut mapper = unsafe { self.mapper_for(pml4) };
+
+        let vga_virt = VirtAddr::new(KERNEL_OFFSET + 0xb8000);
+        let vga_phys = PhysAddr::new(0xb8000);
+
+        let flags = PageTableFlags::PRESENT | PageTableFlags::WRITABLE;
+
+        unsafe {
+            mapper.map_to(
+                Page::containing_address(vga_virt), 
+                PhysFrame::containing_address(vga_phys), 
+                flags, 
+                &mut self.frame_allocator)?.flush();
+        }
+
+        Ok(())
     }
 }
 

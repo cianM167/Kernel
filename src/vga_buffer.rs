@@ -4,11 +4,15 @@ use core::fmt;
 use lazy_static::lazy_static;
 use spin::Mutex;
 
+use crate::allocator::KERNEL_OFFSET;
+
+const VGA_BUFFER: u64 = KERNEL_OFFSET + 0xb8000;
+
 lazy_static! {
     pub static ref WRITER: Mutex<Writer> = Mutex::new(Writer { 
         column_position: 0, 
         color_code: ColorCode::new(Color::White, Color::Black), 
-        buffer:  unsafe { &mut *(0xb8000 as *mut Buffer) },
+        buffer:  unsafe { &mut *(VGA_BUFFER as *mut Buffer) },
     });
 }
 

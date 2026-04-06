@@ -1,7 +1,7 @@
 use alloc::{collections::VecDeque, vec::Vec};
 use x86_64::{VirtAddr, registers::control::{Cr3, Cr3Flags}};
 
-use crate::{allocator::{debug_walk, with_memory}, gdt::GDT, println, threads::{self, Context, Thread, ThreadState}};
+use crate::{allocator::{KERNEL_OFFSET, debug_walk, with_memory}, gdt::GDT, println, threads::{self, Context, Thread, ThreadState}};
 
 pub struct Scheduler {
     threads: Vec<Thread>,
@@ -66,7 +66,11 @@ impl Scheduler {
                     Cr3::write(*frame, Cr3Flags::empty());
                     println!("trying to switch to user mode");
 
-                    println!("RSP = {:#x}", new_ctx.rsp);
+                    let ptr = (KERNEL_OFFSET + 0xb8000) as *const u8;
+
+
+                    println!("VGA byte: {}", *ptr);
+
 
                     // unsafe {
                     //     *((new_ctx.rsp - 8) as *mut u64) = 0xdeadbeef;

@@ -1,5 +1,5 @@
 use alloc::boxed::Box;
-use x86_64::{VirtAddr, registers::control::{Cr3, Cr3Flags}, structures::paging::PhysFrame};
+use x86_64::{PhysAddr, VirtAddr, registers::control::{Cr3, Cr3Flags}, structures::paging::{Mapper, Page, PageTableFlags, PhysFrame}};
 
 use crate::allocator::{USER_CODE_START, with_memory};
 
@@ -34,7 +34,7 @@ impl Thread {
                     Cr3::write(old, Cr3Flags::empty());
                 }
                 
-                let stack_top = unsafe { memory.alloc_user_stack(pml4_frame) };
+                let stack_top = memory.alloc_user_stack(pml4_frame);
 
                 (pml4_frame, stack_top)
             });

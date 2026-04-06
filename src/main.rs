@@ -47,8 +47,6 @@ fn kernel_main(boot_info: &'static BootInfo) -> ! {
     #[cfg(test)]
     test_main();
 
-    println!("Hello I am the kernel\n        \\\n         \\\n            _~^~^~_\n        \\) /  o o  \\ (/\n          '_   -   _'\n          / '-----' \\");
-
     meowl::init();
 
     let phys_mem_offset = VirtAddr::new(boot_info.physical_memory_offset);
@@ -63,8 +61,12 @@ fn kernel_main(boot_info: &'static BootInfo) -> ! {
     let entry = test as u64;
     
     with_memory(|memory| {
+        let (pml4, _) = Cr3::read();
+        memory.map_vga_buffer(pml4).unwrap();
         memory.init_heap().expect("heap initialization failed");
     });
+
+    println!("Hello I am the kernel\n        \\\n         \\\n            _~^~^~_\n        \\) /  o o  \\ (/\n          '_   -   _'\n          / '-----' \\");
 
     // unsafe { Cr3::write(pml4_frame, Cr3Flags::empty()) };
 
