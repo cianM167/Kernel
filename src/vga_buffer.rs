@@ -1,6 +1,6 @@
 use volatile::Volatile;
 use x86_64::instructions::interrupts;
-use core::fmt;
+use core::fmt::{self, Write};
 use lazy_static::lazy_static;
 use spin::Mutex;
 
@@ -148,6 +148,12 @@ pub fn _print(args: fmt::Arguments) {
         WRITER.lock().write_fmt(args).unwrap();
     });
 }
+
+pub fn interrupt_print(msg: &str) {
+        if let Some(mut writer) = WRITER.try_lock() {
+            let _ = writer.write_str(msg);
+        }
+    }
 
 #[test_case]
 fn test_println_simple() {

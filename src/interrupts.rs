@@ -103,8 +103,8 @@ extern "x86-interrupt" fn keyboard_interrupt_handler(
 extern "x86-interrupt" fn breakpoint_handler(
     stack_frame: InterruptStackFrame,
 ) {
+    println!("EXCEPTION: BREAKPOINT\n{:#?}", stack_frame);
     loop {}
-    // println!("EXCEPTION: BREAKPOINT\n{:#?}", stack_frame);
 }
 
 extern "x86-interrupt" fn double_fault_handler(
