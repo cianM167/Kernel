@@ -21,6 +21,7 @@ spin = "0.10.0"
 uart_16550 = "0.2.0"
 volatile = "0.2.6"
 x86_64 = "0.15.4"
+xmas-elf = { version = "0.10.0", default-features = false}
 
 [profile.dev]
 # panic = "abort"

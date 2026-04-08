@@ -25,6 +25,9 @@ mod vga_buffer;
 mod serial;
 mod memory;
 
+const KERNEL_STACK_SIZE: usize = 4096 * 5;
+static mut KERNEL_STACK: [u8; KERNEL_STACK_SIZE] = [0; KERNEL_STACK_SIZE];
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u32)]
 pub enum QemuExitCode {
@@ -47,6 +50,17 @@ fn kernel_main(boot_info: &'static BootInfo) -> ! {
     #[cfg(test)]
     test_main();
 
+    let stack_start = VirtAddr::from_ptr(&raw const KERNEL_STACK);
+    let stack_end = stack_start + KERNEL_STACK_SIZE as u64;
+
+    // unsafe {
+    //     core::arch::asm!(
+    //         "mov rsp, {}",
+    //         in(reg) stack_end.as_u64(),
+    //         options(nostack)
+    //     );
+    // }
+
     meowl::init();
 
     let phys_mem_offset = VirtAddr::new(boot_info.physical_memory_offset);
@@ -58,8 +72,6 @@ fn kernel_main(boot_info: &'static BootInfo) -> ! {
         });
     }
     
-    let entry = test as u64;
-    
     with_memory(|memory| {
         let (pml4, _) = Cr3::read();
         memory.map_vga_buffer(pml4).unwrap();
@@ -68,12 +80,14 @@ fn kernel_main(boot_info: &'static BootInfo) -> ! {
 
     println!("Hello I am the kernel\n        \\\n         \\\n            _~^~^~_\n        \\) /  o o  \\ (/\n          '_   -   _'\n          / '-----' \\");
 
+    println!("kernel fn addr = {:p}", kernel_main as *const ());
+    println!("Stack address is at:{:#}", read_rsp());
     // unsafe { Cr3::write(pml4_frame, Cr3Flags::empty()) };
 
     let mut scheduler = Scheduler::new();
 
-    scheduler.spawn(Thread::new(entry));
-    scheduler.schedule();
+    // scheduler.spawn(Thread::new(0));
+    // scheduler.schedule();
 
 
     let mut executor = Executor::new();
@@ -113,6 +127,20 @@ fn test() -> ! {
             core::arch::asm!("nop");
         }
     }
+}
+
+#[inline(always)]
+fn read_rsp() -> u64 {
+    let rsp: u64;
+    unsafe {
+        asm!(
+            "mov {}, rsp",
+            out(reg) rsp,
+            options(nomem, nostack, preserves_flags)
+        );
+    }
+
+    rsp
 }
 
 

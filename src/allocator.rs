@@ -2,7 +2,8 @@ use core::{alloc::GlobalAlloc, ptr::null_mut};
 
 use bootloader::bootinfo::MemoryMap;
 use linked_list_allocator::LockedHeap;
-use x86_64::{PhysAddr, VirtAddr, registers::control::Cr3, structures::paging::{FrameAllocator, Mapper, OffsetPageTable, Page, PageTable, PageTableFlags, PhysFrame, Size4KiB, frame, mapper::MapToError}};
+use x86_64::{PhysAddr, VirtAddr, registers::control::{Cr3, Cr3Flags}, structures::paging::{FrameAllocator, Mapper, OffsetPageTable, Page, PageTable, PageTableFlags, PhysFrame, Size4KiB, frame, mapper::MapToError}};
+use xmas_elf::{ElfFile, program::{ProgramHeader, Type}};
 
 use crate::{MEMORY, allocator::{bump::{BumpAllocator, Locked}, fixed_size_block::FixedSizeBlockAllocator, linked_list::LinkedListAllocator}, memory::{self, BootInfoFrameAllocator, active_level_4_table}, println, serial_println};
 
@@ -145,7 +146,7 @@ impl MemoryManager {
 
         let current_pm14 = unsafe {active_level_4_table(self.phys_mem_offset) };
 
-        for i in 0..512 {
+        for i in 256..512 {
             pml4[i] = current_pm14[i].clone();// cloning kernel into new address space
         }
 
@@ -244,6 +245,82 @@ impl MemoryManager {
         }
 
         Ok(())
+    }
+
+    pub fn load_elf(
+        &mut self,
+        pml4: PhysFrame,
+        elf_bytes: &[u8],
+    ) -> u64 {
+        let elf = ElfFile::new(elf_bytes).expect("Invalid ELF");
+        let entry = elf.header.pt2.entry_point();
+
+        let mut mapper = unsafe { self.mapper_for(pml4)};
+
+        let old = Cr3::read().0;
+        unsafe { Cr3::write(pml4, Cr3Flags::empty()) };
+
+        for ph in elf.program_iter() {// iterate through program headers
+            if let Ok(Type::Load) = ph.get_type() {
+                self.load_segment(&mut mapper, elf_bytes, ph);
+            }
+        }
+
+        unsafe { Cr3::write(old, Cr3Flags::empty()) };
+
+        entry
+    }
+
+    fn load_segment(
+        &mut self,
+        mapper: &mut OffsetPageTable,
+        elf_bytes: &[u8],
+        ph: ProgramHeader,
+    ) {
+        let virt_addr = ph.virtual_addr();
+        let mem_size = ph.mem_size();
+        let file_size = ph.file_size();
+        let offset = ph.offset();
+
+        let aligned_start = VirtAddr::new(virt_addr & !0xfff);
+        let aligned_end = VirtAddr::new((virt_addr + mem_size + 0xfff) & !0xfff);
+
+        let start_page = Page::containing_address(aligned_start);
+        let end_page = Page::containing_address(aligned_end);
+
+        let mut flags = PageTableFlags::PRESENT | PageTableFlags::USER_ACCESSIBLE;
+
+        if ph.flags().is_write() {
+            flags |= PageTableFlags::WRITABLE;
+        }
+
+        if !ph.flags().is_execute() {
+            flags |= PageTableFlags::NO_EXECUTE;
+        }
+
+        for page in Page::range_inclusive(start_page, end_page) {
+            let frame = self.frame_allocator.allocate_frame().unwrap();
+
+            unsafe {
+                mapper.map_to(page, frame, flags, &mut self.frame_allocator)
+                    .unwrap()
+                    .flush();
+            }
+        }
+
+        let data = &elf_bytes[offset as usize .. (offset + file_size) as usize];
+
+        let dst = virt_addr as *mut u8;
+
+        unsafe {
+            for i in 0..file_size {
+                *dst.add(i as usize) = data[i as usize];
+            }
+
+            for i in file_size..mem_size {
+                *dst.add(i as usize) = 0;
+            }
+        }
     }
 }
 
