@@ -80,14 +80,12 @@ fn kernel_main(boot_info: &'static BootInfo) -> ! {
 
     println!("Hello I am the kernel\n        \\\n         \\\n            _~^~^~_\n        \\) /  o o  \\ (/\n          '_   -   _'\n          / '-----' \\");
 
-    println!("kernel fn addr = {:p}", kernel_main as *const ());
-    println!("Stack address is at:{:#}", read_rsp());
     // unsafe { Cr3::write(pml4_frame, Cr3Flags::empty()) };
 
     let mut scheduler = Scheduler::new();
 
-    // scheduler.spawn(Thread::new(0));
-    // scheduler.schedule();
+    scheduler.spawn(Thread::new(0));
+    scheduler.schedule();
 
 
     let mut executor = Executor::new();

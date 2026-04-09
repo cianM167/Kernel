@@ -126,22 +126,24 @@ pub unsafe fn enter_user_mode(entry: u64, user_stack: u64) -> ! {
             "mov fs, {ds}",
             "mov gs, {ds}",
 
+            "mov rax, {rip}",
+            "mov rbx, {rsp}",
+
             "push {ss}",
-            "push {rsp}",
-            "mov rax, 0x202",
-            "push rax",
+            "push rbx",
+            "push 0x202",
             "push {cs}",
-            "push {rip}",
+            "push rax",
 
             "iretq",
 
             ds = in(reg) user_ds,
             ss = in(reg) user_ds,
-            rsp = in(reg) user_stack,
             cs = in(reg) user_cs,
             rip = in(reg) entry,
+            rsp = in(reg) user_stack,
 
-            options(noreturn)
+            options(noreturn, nostack)
         );
     }
 }

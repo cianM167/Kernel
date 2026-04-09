@@ -21,6 +21,9 @@ pub const HEAP_SIZE: usize = 100 * 1024; // 100 Kib
 
 pub const USER_CODE_START: u64 = 0x400000;
 
+const KERNEL_PML4_START: usize = 0;
+const USER_BASE: u64 = 0x1000_0000;
+
 pub struct MemoryManager {
     pub phys_mem_offset: VirtAddr,
     mapper: OffsetPageTable<'static>,
@@ -127,9 +130,9 @@ impl MemoryManager {
             self.alloc_page(page, flags, &mut mapper).unwrap();// FIXME
         }
 
-        let aligned_top = VirtAddr::new(stack_top.as_u64() & !0xF);
+        let rsp = stack_top - 16;// stopping stuff from being written to bottom of stack
 
-        aligned_top
+        rsp
     }
 
     pub fn new_address_space(&mut self) -> PhysFrame {
@@ -146,7 +149,7 @@ impl MemoryManager {
 
         let current_pm14 = unsafe {active_level_4_table(self.phys_mem_offset) };
 
-        for i in 256..512 {
+        for i in KERNEL_PML4_START..512 {
             pml4[i] = current_pm14[i].clone();// cloning kernel into new address space
         }
 
@@ -253,20 +256,38 @@ impl MemoryManager {
         elf_bytes: &[u8],
     ) -> u64 {
         let elf = ElfFile::new(elf_bytes).expect("Invalid ELF");
-        let entry = elf.header.pt2.entry_point();
 
-        let mut mapper = unsafe { self.mapper_for(pml4)};
+        let min_vaddr = elf.program_iter()
+            .filter_map(|ph| {
+                if let Ok(Type::Load) = ph.get_type() {
+                    Some(ph.virtual_addr())
+                } else {
+                    None
+                }
+            })
+            .min()
+            .expect("No loadable segments");
+
+        let load_bias = USER_BASE - (min_vaddr & !0xfff);
+
+        let entry = elf.header.pt2.entry_point() + load_bias;
+
+        let mut mapper = unsafe { self.mapper_for(pml4) };
 
         let old = Cr3::read().0;
         unsafe { Cr3::write(pml4, Cr3Flags::empty()) };
 
         for ph in elf.program_iter() {// iterate through program headers
             if let Ok(Type::Load) = ph.get_type() {
-                self.load_segment(&mut mapper, elf_bytes, ph);
+                self.load_segment(&mut mapper, elf_bytes, ph, load_bias);
             }
         }
 
         unsafe { Cr3::write(old, Cr3Flags::empty()) };
+
+        println!("ELF entry: {:#x}", elf.header.pt2.entry_point());
+        println!("Load bias: {:#x}", load_bias);
+        println!("Final entry: {:#x}", entry);
 
         entry
     }
@@ -276,29 +297,38 @@ impl MemoryManager {
         mapper: &mut OffsetPageTable,
         elf_bytes: &[u8],
         ph: ProgramHeader,
+        load_bias: u64,
     ) {
-        let virt_addr = ph.virtual_addr();
+        let orig_addr = ph.virtual_addr();
+        let virt_addr = orig_addr + load_bias;
+
         let mem_size = ph.mem_size();
         let file_size = ph.file_size();
         let offset = ph.offset();
 
         let aligned_start = VirtAddr::new(virt_addr & !0xfff);
-        let aligned_end = VirtAddr::new((virt_addr + mem_size + 0xfff) & !0xfff);
+        let aligned_end = VirtAddr::new((virt_addr + mem_size - 1) & !0xfff);
 
         let start_page = Page::containing_address(aligned_start);
         let end_page = Page::containing_address(aligned_end);
 
-        let mut flags = PageTableFlags::PRESENT | PageTableFlags::USER_ACCESSIBLE;
+        let mut flags = PageTableFlags::PRESENT | PageTableFlags::USER_ACCESSIBLE | PageTableFlags::WRITABLE;
 
-        if ph.flags().is_write() {
-            flags |= PageTableFlags::WRITABLE;
-        }
+        // if ph.flags().is_write() {
+        //     flags |= PageTableFlags::WRITABLE;
+        // }
 
         if !ph.flags().is_execute() {
             flags |= PageTableFlags::NO_EXECUTE;
         }
 
         for page in Page::range_inclusive(start_page, end_page) {
+            let addr = page.start_address().as_u64();
+
+            if addr < USER_BASE {
+                panic!("ELF tried to map below USER_BASE");
+            }
+
             let frame = self.frame_allocator.allocate_frame().unwrap();
 
             unsafe {
