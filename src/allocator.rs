@@ -111,6 +111,7 @@ impl MemoryManager {
     // }
 
     pub fn alloc_user_stack(&mut self, pml4: PhysFrame) -> VirtAddr {
+        println!("Allocating user stack");
         let mut mapper = unsafe { self.mapper_for(pml4) };
         
         const STACK_PAGES: usize = 4;
@@ -130,7 +131,9 @@ impl MemoryManager {
             self.alloc_page(page, flags, &mut mapper).unwrap();// FIXME
         }
 
-        let rsp = stack_top - 16;// stopping stuff from being written to bottom of stack
+        // let mut rsp = stack_top -16;// stopping stuff from being written to bottom of stack
+
+        let rsp = unsafe { VirtAddr::new(build_user_stack(stack_top.as_u64())) };// fix me
 
         rsp
     }
@@ -401,6 +404,45 @@ pub fn debug_walk(addr: VirtAddr, phys_mem_offset: VirtAddr) {
 
 fn align_up(addr: usize, align: usize) -> usize {
     (addr + align - 1) & !(align - 1)
+}
+
+pub unsafe fn build_user_stack(stack_top: u64) -> u64 {// recreating linux abi and arguments
+    let mut sp = stack_top;
+
+    let prog = b"prog\0";
+
+    sp -= prog.len() as u64;
+    let prog_ptr = sp;
+
+    sp &= !0xF;// realigning after writing name
+    println!("SP after align: {:#x}", sp);
+    println!("prog_ptr: {:#x}", prog_ptr);
+
+    unsafe {
+        core::ptr::copy_nonoverlapping(
+            prog.as_ptr(), 
+            prog_ptr as *mut u8, 
+            prog.len(),
+        );
+    
+
+        push(&mut sp, 0);// envp
+        push(&mut sp, 0);// argv
+        push(&mut sp, prog_ptr);// argv[0]
+        push(&mut sp, 1);// argc
+    }
+
+    sp
+}
+
+unsafe fn push(sp: &mut u64, val: u64) {
+    *sp -= 8;
+
+    assert!(*sp % 8 == 0);
+
+    unsafe {
+        *(*sp as *mut u64) = val;
+    }
 }
 
 pub fn with_memory<F, R>(f: F) -> R

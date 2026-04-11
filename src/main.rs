@@ -50,9 +50,6 @@ fn kernel_main(boot_info: &'static BootInfo) -> ! {
     #[cfg(test)]
     test_main();
 
-    let stack_start = VirtAddr::from_ptr(&raw const KERNEL_STACK);
-    let stack_end = stack_start + KERNEL_STACK_SIZE as u64;
-
     // unsafe {
     //     core::arch::asm!(
     //         "mov rsp, {}",
