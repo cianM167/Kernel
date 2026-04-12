@@ -275,10 +275,10 @@ impl MemoryManager {
 
         let entry = elf.header.pt2.entry_point() + load_bias;
 
-        let mut mapper = unsafe { self.mapper_for(pml4) };
-
         let old = Cr3::read().0;
         unsafe { Cr3::write(pml4, Cr3Flags::empty()) };
+
+        let mut mapper = unsafe { self.mapper_for(pml4) };
 
         for ph in elf.program_iter() {// iterate through program headers
             if let Ok(Type::Load) = ph.get_type() {
@@ -302,8 +302,7 @@ impl MemoryManager {
         ph: ProgramHeader,
         load_bias: u64,
     ) {
-        let orig_addr = ph.virtual_addr();
-        let virt_addr = orig_addr + load_bias;
+        let virt_addr = ph.virtual_addr() + load_bias;
 
         let mem_size = ph.mem_size();
         let file_size = ph.file_size();
@@ -343,7 +342,9 @@ impl MemoryManager {
 
         let data = &elf_bytes[offset as usize .. (offset + file_size) as usize];
 
-        let dst = virt_addr as *mut u8;
+        let page_offset = (virt_addr & 0xfff) as usize;
+
+        let dst = (aligned_start.as_u64() + page_offset as u64) as *mut u8;
 
         unsafe {
             for i in 0..file_size {
