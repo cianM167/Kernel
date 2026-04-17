@@ -1,5 +1,6 @@
 use core::{alloc::GlobalAlloc, ptr::null_mut};
 
+use alloc::vec::Vec;
 use bootloader::bootinfo::MemoryMap;
 use linked_list_allocator::LockedHeap;
 use x86_64::{PhysAddr, VirtAddr, registers::control::{Cr3, Cr3Flags}, structures::paging::{FrameAllocator, Mapper, OffsetPageTable, Page, PageTable, PageTableFlags, PhysFrame, Size4KiB, frame, mapper::MapToError}};
@@ -111,7 +112,7 @@ impl MemoryManager {
     // }
 
     pub fn alloc_user_stack(&mut self, pml4: PhysFrame) -> VirtAddr {
-        println!("Allocating user stack");
+        // println!("Allocating user stack");
         let mut mapper = unsafe { self.mapper_for(pml4) };
         
         const STACK_PAGES: usize = 4;
@@ -133,7 +134,12 @@ impl MemoryManager {
 
         // let mut rsp = stack_top -16;// stopping stuff from being written to bottom of stack
 
+        let old = Cr3::read().0;
+        unsafe { Cr3::write(pml4, Cr3Flags::empty()) };
+
         let rsp = unsafe { VirtAddr::new(build_user_stack(stack_top.as_u64())) };// fix me
+
+        unsafe { Cr3::write(old, Cr3Flags::empty()) };
 
         rsp
     }
@@ -258,7 +264,10 @@ impl MemoryManager {
         pml4: PhysFrame,
         elf_bytes: &[u8],
     ) -> u64 {
-        let elf = ElfFile::new(elf_bytes).expect("Invalid ELF");
+        let mut aligned = Vec::with_capacity(elf_bytes.len());
+        aligned.extend_from_slice(elf_bytes);
+
+        let elf = ElfFile::new(aligned.as_slice()).expect("Invalid ELF");
 
         let min_vaddr = elf.program_iter()
             .filter_map(|ph| {
