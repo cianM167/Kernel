@@ -297,9 +297,9 @@ impl MemoryManager {
 
         unsafe { Cr3::write(old, Cr3Flags::empty()) };
 
-        println!("ELF entry: {:#x}", elf.header.pt2.entry_point());
-        println!("Load bias: {:#x}", load_bias);
-        println!("Final entry: {:#x}", entry);
+        // println!("ELF entry: {:#x}", elf.header.pt2.entry_point());
+        // println!("Load bias: {:#x}", load_bias);
+        // println!("Final entry: {:#x}", entry);
 
         entry
     }
@@ -425,8 +425,8 @@ pub unsafe fn build_user_stack(stack_top: u64) -> u64 {// recreating linux abi a
     let prog_ptr = sp;
 
     sp &= !0xF;// realigning after writing name
-    println!("SP after align: {:#x}", sp);
-    println!("prog_ptr: {:#x}", prog_ptr);
+    // println!("SP after align: {:#x}", sp);
+    // println!("prog_ptr: {:#x}", prog_ptr);
 
     unsafe {
         core::ptr::copy_nonoverlapping(
@@ -436,6 +436,12 @@ pub unsafe fn build_user_stack(stack_top: u64) -> u64 {// recreating linux abi a
         );
     
 
+        push(&mut sp, 0);// AT_NULL
+        push(&mut sp, 6);// AT_PAGESZ
+        push(&mut sp, 9);// AT_ENTRY
+        push(&mut sp, 3);// AT_PHDR
+        push(&mut sp, 5);// AT_PHNM
+        push(&mut sp, 4);// AT_PHENT
         push(&mut sp, 0);// envp
         push(&mut sp, 0);// argv
         push(&mut sp, prog_ptr);// argv[0]
