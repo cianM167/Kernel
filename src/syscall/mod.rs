@@ -2,6 +2,8 @@ use x86_64::{VirtAddr, registers::model_specific::{Efer, EferFlags, LStar, Msr}}
 
 use crate::{print, println};
 
+static mut KERNEL_STACK: [u8; 4096 * 4] = [0; 4096 * 4];
+
 const IA32_STAR: u32 = 0xC000_0081;
 const IA32_LSTAR: u32 = 0xC000_0082;
 const IA32_FMASK: u32 = 0xC000_0084;
@@ -43,15 +45,43 @@ pub extern "C" fn syscall_entry() {
         core::arch::naked_asm!(
             "swapgs",
 
-            // save user return context
-            "mov r11, rcx",   // save RIP (optional but useful)
-            "mov rcx, r11",   // keep symmetry
+            // save user rsp fixme later
+            "mov r12, rsp",
+
+            // switch to kernel stack
+            "lea rsp, [{stack} + {size}]",
+
+            // align stack
+            "and rsp, -16",
+
+            // save return state
+            "push rcx",
+            "push r11",
+
+            // preserve original registers first
+            "mov r13, rdi",   // save arg1 (fd)
+            "mov r14, rsi",   // save arg2 (buf)
+            "mov r15, rdx",   // save arg3 (len)
+
+            // now set up Rust ABI
+            "mov rdi, rax",   // num
+            "mov rsi, r13",   // arg1
+            "mov rdx, r14",   // arg2
+            "mov rcx, r15",   // arg3
 
             "call {handler}",
+
+            "pop r11",
+            "pop rcx",
+
+            // restore user stack
+            "mov rsp, r12",
 
             "swapgs",
             "sysretq",
 
+            stack = sym KERNEL_STACK,
+            size = const 4096 * 4,
             handler = sym syscall_handler,
         );
     }
@@ -98,9 +128,9 @@ fn sys_write(fd: u64, buf: *const u8, len: u64) -> u64 {
     println!("buf pointer = {:#x}", buf as u64);
     println!("len = {}", len);
 
-    // for &b in slice {
-    //     // print!("{}", b as char);
-    // }
+    for &b in slice {
+        print!("{}", b as char);
+    }
 
     len
 }

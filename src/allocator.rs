@@ -3,7 +3,7 @@ use core::{alloc::GlobalAlloc, ptr::null_mut};
 use alloc::vec::Vec;
 use bootloader::bootinfo::MemoryMap;
 use linked_list_allocator::LockedHeap;
-use x86_64::{PhysAddr, VirtAddr, registers::control::{Cr3, Cr3Flags}, structures::paging::{FrameAllocator, Mapper, OffsetPageTable, Page, PageTable, PageTableFlags, PhysFrame, Size4KiB, frame, mapper::MapToError}};
+use x86_64::{PhysAddr, VirtAddr, registers::control::{Cr3, Cr3Flags}, structures::paging::{FrameAllocator, Mapper, OffsetPageTable, Page, PageTable, PageTableFlags, PhysFrame, Size4KiB, Translate, frame, mapper::MapToError}};
 use xmas_elf::{ElfFile, program::{ProgramHeader, Type}};
 
 use crate::{MEMORY, allocator::{bump::{BumpAllocator, Locked}, fixed_size_block::FixedSizeBlockAllocator, linked_list::LinkedListAllocator}, memory::{self, BootInfoFrameAllocator, active_level_4_table}, println, serial_println};
@@ -301,6 +301,17 @@ impl MemoryManager {
         // println!("Load bias: {:#x}", load_bias);
         // println!("Final entry: {:#x}", entry);
 
+        unsafe { Cr3::write(pml4, Cr3Flags::empty()) };
+
+        println!(
+            "translate 0x402000 = {:?}",
+            mapper.translate_addr(VirtAddr::new(0x402000))
+        );
+
+        unsafe { Cr3::write(old, Cr3Flags::empty()) };
+
+        loop {}
+
         entry
     }
 
@@ -318,7 +329,7 @@ impl MemoryManager {
         let offset = ph.offset();
 
         let aligned_start = VirtAddr::new(virt_addr & !0xfff);
-        let aligned_end = VirtAddr::new((virt_addr + mem_size - 1) & !0xfff);
+        let aligned_end = VirtAddr::new((virt_addr + mem_size + 0xfff) & !0xfff);
 
         let start_page = Page::containing_address(aligned_start);
         let end_page = Page::containing_address(aligned_end);
