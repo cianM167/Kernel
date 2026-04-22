@@ -1,0 +1,10 @@
+long write(int fd, const char* buf, long len);
+void exit(int code);
+void puts(const char* s);
+void print_int(long x);
+void print_hex(unsigned long x);
+void printf(const char* fmt, ...);
+void read(int fd, void* buf, long len);
+char getchar();
+int gets(char * bf, int max);
+void scanf(const char* fmt, ...);

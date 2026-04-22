@@ -66,12 +66,6 @@ impl Scheduler {
                     Cr3::write(*frame, Cr3Flags::empty());
                     println!("trying to switch to user mode");
 
-                    let ptr = (KERNEL_OFFSET + 0xb8000) as *const u8;
-
-
-                    println!("VGA byte: {}", *ptr);
-
-
                     // unsafe {
                     //     *((new_ctx.rsp - 8) as *mut u64) = 0xdeadbeef;
                     //     println!("value in RSP = {:#x}", *((new_ctx.rsp - 8) as *mut u64));

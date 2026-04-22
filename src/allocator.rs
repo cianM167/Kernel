@@ -280,7 +280,7 @@ impl MemoryManager {
             .min()
             .expect("No loadable segments");
 
-        let load_bias = USER_BASE - (min_vaddr & !0xfff);
+        let load_bias = 0;//maybe fix later??
 
         let entry = elf.header.pt2.entry_point() + load_bias;
 

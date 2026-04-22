@@ -1,3 +1,5 @@
+// to compile run : gcc -nostdlib -static -fno-pie -no-pie syscall_test.c -o syscall_test.elf
+
 static inline long write(int fd, const char* buf, long len) {
     register long rax __asm__("rax") = 1;
     register long rdi __asm__("rdi") = fd;
@@ -25,6 +27,7 @@ static inline void exit(int code) {
 }
 
 void _start() {
-    write(1, "hello\n", 6);
+    write(1, "Hello World!!!!\n", 16);
     exit(0);
 }
+

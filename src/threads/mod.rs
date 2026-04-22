@@ -5,7 +5,7 @@ use crate::{allocator::{USER_CODE_START, with_memory}, println};
 
 pub mod scheduler;
 
-pub static USER_PROG: &[u8] = include_bytes!("../../user_programs/syscall_test.elf");// ignore how awful the path is
+pub static USER_PROG: &[u8] = include_bytes!("../../user_programs/printf_test.elf");// ignore how awful the path is
 
 pub struct Thread {
     context: Context,
@@ -16,14 +16,12 @@ pub struct Thread {
 
 impl Thread {
     pub fn new(_entry: u64) -> Self {
-        println!("new called");
 
         let (address_space, stack_top, entry) = 
             with_memory(|memory| {
                 let pml4_frame = memory.new_address_space();
                 // memory.map_user_pages(pml4_frame).expect("shat the bed");
                 // memory.map_user_code(pml4_frame, VirtAddr::new(USER_CODE_START)).expect("shat þe bed");
-                println!("i swear to god if this bug is caused by black magic memory entropy im going to kms");
                 let entry = memory.load_elf(pml4_frame, USER_PROG);
 
                 // let old = Cr3::read().0;
@@ -37,7 +35,7 @@ impl Thread {
                 // unsafe {
                 //     Cr3::write(old, Cr3Flags::empty());
                 // }
-                println!("about to alloc user stack");
+                // println!("about to alloc user stack");
                 let stack_top = memory.alloc_user_stack(pml4_frame);
 
                 (pml4_frame, stack_top, entry)

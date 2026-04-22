@@ -97,8 +97,8 @@ pub extern "C" fn syscall_handler(
     arg5: u64,
     arg6: u64,
 ) -> u64 {
-    println!("RDI={:#x} RSI={:#x} RDX={:#x}", arg1, arg2, arg3);
     match num {
+        0 => sys_read(arg1, arg2 as *mut u8, arg3),
         1 => sys_write(arg1, arg2 as * const u8, arg3),
         60 => sys_exit(arg1),
         _ => -1i64 as u64,
@@ -106,27 +106,17 @@ pub extern "C" fn syscall_handler(
 }
 
 fn sys_write(fd: u64, buf: *const u8, len: u64) -> u64 {
-    println!("about to write");
-    println!("fd is: {}, buffer is: {}", fd, (buf as u8) as char);
     if fd != 1 && fd != 2 {
         return -1i64 as u64; // EBADF later
     }
-
-    println!("fd passed");
 
     if buf.is_null() {
         return -1i64 as u64;
     }
 
-    println!("buffer not null");
-
     let slice = unsafe {
         core::slice::from_raw_parts(buf, len as usize)
     };
-
-    println!("i havent exited early");
-    println!("buf pointer = {:#x}", buf as u64);
-    println!("len = {}", len);
 
     for &b in slice {
         print!("{}", b as char);
@@ -136,6 +126,32 @@ fn sys_write(fd: u64, buf: *const u8, len: u64) -> u64 {
 }
 
 fn sys_exit(code: u64) -> u64 {
-    println!("Process exiited: {}", code);
+    println!("Process exited: {}", code);
     loop {}
+}
+
+static mut INPUT_BUF: [u8; 1024] = [0; 1024];
+static mut INPUT_LEN: usize = 0;
+
+fn sys_read(fd: u64, buf: *mut u8, len: u64) -> u64 {
+    if fd != 0 {
+        return -1i64 as u64;
+    }
+
+    let mut i = 0;
+
+    unsafe {
+        while i < len as usize && INPUT_LEN > 0 {
+            *buf.add(i) = INPUT_BUF[0];
+
+            for j in 1..INPUT_LEN {
+                INPUT_BUF[j - 1] = INPUT_BUF[j];
+            }
+
+            INPUT_LEN -= 1;
+            i += 1;
+        }
+    }
+
+    i as u64
 }
