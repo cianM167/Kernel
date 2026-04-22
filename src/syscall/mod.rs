@@ -1,6 +1,6 @@
 use x86_64::{VirtAddr, registers::model_specific::{Efer, EferFlags, LStar, Msr}};
 
-use crate::{print, println};
+use crate::{print, println, task::keyboard::STDIN_BUFFER};
 
 static mut KERNEL_STACK: [u8; 4096 * 4] = [0; 4096 * 4];
 
@@ -130,28 +130,24 @@ fn sys_exit(code: u64) -> u64 {
     loop {}
 }
 
-static mut INPUT_BUF: [u8; 1024] = [0; 1024];
-static mut INPUT_LEN: usize = 0;
-
 fn sys_read(fd: u64, buf: *mut u8, len: u64) -> u64 {
     if fd != 0 {
         return -1i64 as u64;
     }
 
+    let mut stdin = STDIN_BUFFER.lock();
+
     let mut i = 0;
 
-    unsafe {
-        while i < len as usize && INPUT_LEN > 0 {
-            *buf.add(i) = INPUT_BUF[0];
-
-            for j in 1..INPUT_LEN {
-                INPUT_BUF[j - 1] = INPUT_BUF[j];
-            }
-
-            INPUT_LEN -= 1;
-            i += 1;
+   while i < len {
+        match stdin.pop_front() {
+            Some(byte) => unsafe {
+                *buf.add(i as usize) = byte;
+                i += 1;
+            },
+            None => break,
         }
-    }
+   }
 
     i as u64
 }

@@ -1,5 +1,6 @@
 use core::sync::atomic::{AtomicU64, Ordering};
 
+use alloc::collections::VecDeque;
 use spin::Mutex;
 use x86_64::PrivilegeLevel;
 use x86_64::registers::control::Cr2;
@@ -17,6 +18,7 @@ pub const PIC_1_OFFSET: u8 = 32;
 pub const PIC_2_OFFSET: u8 = PIC_1_OFFSET + 8;
 
 pub static TIMER: AtomicU64 = AtomicU64::new(0);
+pub static STDIN_MUTEX: Mutex<VecDeque<u8>> = Mutex::new(VecDeque::new());
 
 #[derive(Debug, Clone, Copy)]
 #[repr(u8)]

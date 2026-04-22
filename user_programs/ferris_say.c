@@ -8,6 +8,9 @@
     -o printf_test.elf
 
 void _start() {
-    
+    int a;
+
+    scanf("%d", &a); 
+    printf("%d", a);
     exit(0);
 }

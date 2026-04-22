@@ -84,7 +84,6 @@ fn kernel_main(boot_info: &'static BootInfo) -> ! {
     scheduler.spawn(Thread::new(0));
     scheduler.schedule();
 
-
     // let mut executor = Executor::new();
     // executor.spawn(Task::new(example_task()));
     // executor.spawn(Task::new(keyboard::print_keypresses()));

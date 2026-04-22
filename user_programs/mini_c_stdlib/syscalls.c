@@ -1,3 +1,5 @@
+int atoi(const char *strg);
+
 static inline long write(int fd, const char* buf, long len) {
     register long rax __asm__("rax") = 1;
     register long rdi __asm__("rdi") = fd;
@@ -158,4 +160,57 @@ int gets(char* buf, int max) {
 
     buf[i] = 0;
     return i;
+}
+
+void scanf(const char* fmt, ...) {
+    char buffer[128];
+    gets(buffer, sizeof(buffer));
+
+    va_list args;
+    va_start(args, fmt);
+
+    const char* p = fmt;
+    char* input = buffer;
+
+    while (*p) {
+        if (*p == '%') {
+            p++;// skipping %
+
+            switch (*p) {
+                case 'd': {
+                    int* out = va_arg(args, int*);
+                    *out = atoi(input);
+
+                    while (*input && *input != ' ') input++;
+                    if (*input == ' ') input++;
+                    break;
+                }
+                case 's': {
+                    char* out = va_arg(args, char*);
+                    while (*input && *input != ' ') {
+                        *out++ = *input++;
+                    }
+                    *out = 0;
+                    if (*input == ' ') input++;
+                }
+            }
+        }
+        p++;
+    }
+    va_end(args);
+}
+
+int atoi(const char *strg) {// geeksforgeeks my beloved
+    // Initialize res to 0
+    int res = 0;
+    int i = 0;
+
+    // Iterate through the string strg and compute res
+    while (strg[i] != '\0')
+    {
+        res = res * 10 + (strg[i] - '0');
+        i++;
+    }
+
+    return res;
 }
