@@ -310,7 +310,7 @@ impl MemoryManager {
 
         unsafe { Cr3::write(old, Cr3Flags::empty()) };
 
-        loop {}
+        // loop {}
 
         entry
     }
@@ -329,7 +329,7 @@ impl MemoryManager {
         let offset = ph.offset();
 
         let aligned_start = VirtAddr::new(virt_addr & !0xfff);
-        let aligned_end = VirtAddr::new((virt_addr + mem_size + 0xfff) & !0xfff);
+        let aligned_end = VirtAddr::new((virt_addr + mem_size - 1) & !0xfff);
 
         let start_page = Page::containing_address(aligned_start);
         let end_page = Page::containing_address(aligned_end);
@@ -345,10 +345,8 @@ impl MemoryManager {
         }
 
         for page in Page::range_inclusive(start_page, end_page) {
-            let addr = page.start_address().as_u64();
-
-            if addr < USER_BASE {
-                panic!("ELF tried to map below USER_BASE");
+            if mapper.translate_page(page).is_ok() {
+                continue;
             }
 
             let frame = self.frame_allocator.allocate_frame().unwrap();
@@ -364,15 +362,17 @@ impl MemoryManager {
 
         let page_offset = (virt_addr & 0xfff) as usize;
 
-        let dst = (aligned_start.as_u64() + page_offset as u64) as *mut u8;
+        let dst = VirtAddr::new(virt_addr);
 
-        unsafe {
-            for i in 0..file_size {
-                *dst.add(i as usize) = data[i as usize];
+        for i in 0..file_size {
+            unsafe {
+                *(dst.as_u64() as *mut u8).add(i as usize) = data[i as usize];
             }
+        }
 
-            for i in file_size..mem_size {
-                *dst.add(i as usize) = 0;
+        for i in file_size..mem_size {
+            unsafe {
+                *(dst.as_u64() as *mut u8).add(i as usize) = 0;
             }
         }
     }
