@@ -1,11 +1,11 @@
 use alloc::boxed::Box;
 use x86_64::{PhysAddr, VirtAddr, registers::control::{Cr3, Cr3Flags}, structures::paging::{Mapper, Page, PageTableFlags, PhysFrame}};
 
-use crate::{allocator::{USER_CODE_START, with_memory}, println};
+use crate::{allocator::{USER_CODE_START, with_memory}, println, threads::scheduler::SCHEDULER};
 
 pub mod scheduler;
 
-pub static USER_PROG: &[u8] = include_bytes!("../../user_programs/ferris_say.elf");// ignore how awful the path is
+pub static USER_PROG: &[u8] = include_bytes!("../../user_programs/printf_test.elf");// ignore how awful the path is
 
 pub struct Thread {
     context: Context,
@@ -50,6 +50,10 @@ impl Thread {
             address_space
         }
     }
+}
+
+pub fn yield_now() {
+    SCHEDULER.lock().schedule();
 }
 
 #[derive(Clone, Copy, PartialEq)]

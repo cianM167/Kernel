@@ -1,7 +1,13 @@
 use alloc::{collections::VecDeque, vec::Vec};
+use lazy_static::lazy_static;
+use spin::Mutex;
 use x86_64::{VirtAddr, registers::control::{Cr3, Cr3Flags}};
 
 use crate::{allocator::{KERNEL_OFFSET, debug_walk, with_memory}, gdt::GDT, println, threads::{self, Context, Thread, ThreadState}};
+
+lazy_static! {
+    pub static ref SCHEDULER: Mutex<Scheduler> = Mutex::new(Scheduler::new());
+}
 
 pub struct Scheduler {
     threads: Vec<Thread>,
@@ -80,6 +86,8 @@ impl Scheduler {
             }
         }
     }
+
+    
 }
 
 unsafe extern "C" {
@@ -113,7 +121,7 @@ pub unsafe fn enter_user_mode(entry: u64, user_stack: u64) -> ! {
 
     unsafe {
         core::arch::asm!(
-            "cli",
+            // "cli", uuuhhhhh idk might fix shit
 
             "mov ds, {ds}",
             "mov es, {ds}",

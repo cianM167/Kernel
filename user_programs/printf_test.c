@@ -8,6 +8,6 @@
     -o printf_test.elf
 
 void _start() {
-    printf("hello %s %d %x\n", "world", 42, 0xdeadbeef);
+    printf("\n\nHello I am the user program\n        \\\n         \\\n            _~^~^~_\n        \\) /  o o  \\ (/\n          '_   -   _'\n          / '-----' \\ \n");
     exit(0);
 }

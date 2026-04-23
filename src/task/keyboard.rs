@@ -22,6 +22,7 @@ pub fn add_scancode(scancode: u8) {
 
     //convert scancode -> ascii
     let ascii = scancode_to_ascii(scancode);
+    print!("{:?} added to stdin buffer bitch", ascii);
 
     if let Some(c) = ascii {
         buf.push_back(c as u8);

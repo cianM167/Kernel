@@ -1,12 +1,34 @@
-use x86_64::{VirtAddr, registers::model_specific::{Efer, EferFlags, LStar, Msr}};
+use x86_64::{VirtAddr, instructions::hlt, registers::model_specific::{Efer, EferFlags, LStar, Msr}};
 
-use crate::{print, println, task::keyboard::STDIN_BUFFER};
+use crate::{print, println, task::keyboard::STDIN_BUFFER, threads};
 
 static mut KERNEL_STACK: [u8; 4096 * 4] = [0; 4096 * 4];
 
 const IA32_STAR: u32 = 0xC000_0081;
 const IA32_LSTAR: u32 = 0xC000_0082;
 const IA32_FMASK: u32 = 0xC000_0084;
+
+#[repr(C)]
+pub struct CpuLocal {
+    pub user_rsp: u64,
+    pub kernel_rsp: u64,
+}
+
+static mut CPU_LOCAL: CpuLocal = CpuLocal {
+    user_rsp: 0,
+    kernel_rsp: 0,
+};
+
+const IA32_GS_BASE: u32 = 0xC0000101;
+const IA32_KERNEL_GS_BASE: u32 = 0xC0000102;
+
+pub fn init_gs() {
+    unsafe {
+        let ptr = core::ptr::addr_of!(CPU_LOCAL) as u64;
+        Msr::new(IA32_GS_BASE).write(ptr);
+        Msr::new(IA32_KERNEL_GS_BASE).write(ptr);
+    }
+}
 
 pub fn enable_syscall() {
     unsafe {
@@ -35,7 +57,7 @@ pub fn init_syscalls(syscall_entry: u64) {
 
         Msr::new(IA32_LSTAR).write(syscall_entry);
 
-        Msr::new(IA32_FMASK).write(1 << 9);
+        Msr::new(IA32_FMASK).write(0);// allow for interrupts pray this doesnt break anything
     }
 }
 
@@ -70,6 +92,8 @@ pub extern "C" fn syscall_entry() {
             "mov rcx, r15",   // arg3
 
             "call {handler}",
+
+            "or r11, 0x200",// ensure fuckass interrupt flag is set
 
             "pop r11",
             "pop rcx",
@@ -135,19 +159,33 @@ fn sys_read(fd: u64, buf: *mut u8, len: u64) -> u64 {
         return -1i64 as u64;
     }
 
-    let mut stdin = STDIN_BUFFER.lock();
-
     let mut i = 0;
 
-   while i < len {
-        match stdin.pop_front() {
-            Some(byte) => unsafe {
-                *buf.add(i as usize) = byte;
-                i += 1;
-            },
-            None => break,
-        }
-   }
+    println!("got to loop after scanf call");
+    while i < len {
+        println!("loop entered");
+        let byte = loop {
+            println!("looping");
+            if let Some(b) = STDIN_BUFFER.lock().pop_front() {
+                print!("{}", b as char);
+                break b;
+            }
+            println!("i make it past the lock");
 
-    i as u64
+            hlt();
+            // threads::yield_now();
+        };
+
+        unsafe {
+            *buf.add(i as usize) = byte;
+        }
+
+        i += 1;
+
+        if byte ==b'\n' {
+            break;
+        }
+    }
+
+    i
 }

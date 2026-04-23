@@ -7,11 +7,14 @@
     mini_c_stdlib/syscalls.c \
     -o printf_test.elf
 
-void _start() {
-    int a;
+int _start(){
 
-    printf("Please input a string you want to display on the screen\n");
-    scanf("%d", &a); 
-    printf("%d", a);
+    int count = 1;
+
+    while (count < 11) {
+        printf("%d\n", count);
+        count++;
+    }
+
     exit(0);
 }

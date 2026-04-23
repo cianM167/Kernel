@@ -301,14 +301,14 @@ impl MemoryManager {
         // println!("Load bias: {:#x}", load_bias);
         // println!("Final entry: {:#x}", entry);
 
-        unsafe { Cr3::write(pml4, Cr3Flags::empty()) };
+        // unsafe { Cr3::write(pml4, Cr3Flags::empty()) };
 
-        println!(
-            "translate 0x402000 = {:?}",
-            mapper.translate_addr(VirtAddr::new(0x402000))
-        );
+        // println!(
+        //     "translate 0x402000 = {:?}",
+        //     mapper.translate_addr(VirtAddr::new(0x402000))
+        // );
 
-        unsafe { Cr3::write(old, Cr3Flags::empty()) };
+        // unsafe { Cr3::write(old, Cr3Flags::empty()) };
 
         // loop {}
 

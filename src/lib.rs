@@ -13,7 +13,7 @@ extern crate alloc;
 use bootloader::{BootInfo, entry_point};
 use spin::Mutex;
 
-use crate::{allocator::MemoryManager, syscall::{enable_syscall, init_syscalls, syscall_entry}};
+use crate::{allocator::MemoryManager, syscall::{enable_syscall, init_gs, init_syscalls, syscall_entry}};
 
 pub mod serial;
 pub mod vga_buffer;
@@ -51,6 +51,7 @@ pub fn init() {
 
     enable_syscall();
     init_syscalls(syscall_entry as u64);
+    init_gs();
 }
 
 pub fn hlt_loop() -> ! {
