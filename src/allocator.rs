@@ -27,7 +27,7 @@ const USER_BASE: u64 = 0x1000_0000;
 
 pub struct MemoryManager {
     pub phys_mem_offset: VirtAddr,
-    mapper: OffsetPageTable<'static>,
+    pub kernel_mapper: OffsetPageTable<'static>,
     frame_allocator: BootInfoFrameAllocator,
 }
 
@@ -37,12 +37,12 @@ impl MemoryManager {
         memory_map: &'static MemoryMap,
     ) -> Self {
         
-        let mapper = unsafe { memory::init(phys_mem_offset) };
+        let kernel_mapper = unsafe { memory::init(phys_mem_offset) };
         let frame_allocator = unsafe { BootInfoFrameAllocator::init(memory_map) };
 
         Self {
             phys_mem_offset,
-            mapper,
+            kernel_mapper,
             frame_allocator,
         }
     }
@@ -64,7 +64,7 @@ impl MemoryManager {
                 .ok_or(MapToError::FrameAllocationFailed)?;
             let flags = PageTableFlags::PRESENT | PageTableFlags::WRITABLE;
             unsafe {
-                self.mapper.map_to(page, frame, flags, &mut self.frame_allocator)?.flush()
+                self.kernel_mapper.map_to(page, frame, flags, &mut self.frame_allocator)?.flush()
             };
         }
 
@@ -142,6 +142,42 @@ impl MemoryManager {
         unsafe { Cr3::write(old, Cr3Flags::empty()) };
 
         rsp
+    }
+
+    pub fn alloc_kernel_stack(&mut self) -> u64 {
+        const STACK_SIZE: usize = 4096 * 4;
+
+        // pick a high kernel address
+        static mut NEXT_STACK: u64 = 0xffff_ffff_9000_0000;
+
+        let stack_top = unsafe {
+            let top = NEXT_STACK;
+            NEXT_STACK += STACK_SIZE as u64;
+            top
+        };
+
+        let stack_start = stack_top - STACK_SIZE as u64;
+
+        let mapper = &mut self.kernel_mapper ;
+
+        let flags = PageTableFlags::PRESENT
+            | PageTableFlags::WRITABLE
+            | PageTableFlags::NO_EXECUTE;
+
+        for i in 0..(STACK_SIZE / 4096) {
+            let addr = VirtAddr::new(stack_start + (i as u64 * 4096));
+            let page: Page<Size4KiB> = Page::containing_address(addr);
+
+            let frame = self.frame_allocator.allocate_frame().unwrap();
+
+            unsafe {
+                mapper.map_to(page, frame, flags, &mut self.frame_allocator)
+                    .unwrap()
+                    .flush();
+            }
+        }
+
+        stack_top
     }
 
     pub fn new_address_space(&mut self) -> PhysFrame {

@@ -12,6 +12,7 @@ pub struct Thread {
     address_space: PhysFrame,
     state: ThreadState,
     stack_top: VirtAddr,
+    pub kernel_stack_top: u64,
 }
 
 impl Thread {
