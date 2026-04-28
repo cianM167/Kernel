@@ -111,7 +111,7 @@ impl MemoryManager {
     //     Ok(())
     // }
 
-    pub fn alloc_user_stack(&mut self, pml4: PhysFrame) -> VirtAddr {
+    pub fn alloc_user_stack(&mut self, pml4: PhysFrame, entry: u64) -> VirtAddr {
         // println!("Allocating user stack");
         let mut mapper = unsafe { self.mapper_for(pml4) };
         
@@ -137,7 +137,7 @@ impl MemoryManager {
         let old = Cr3::read().0;
         unsafe { Cr3::write(pml4, Cr3Flags::empty()) };
 
-        let rsp = unsafe { VirtAddr::new(build_user_stack(stack_top.as_u64())) };// fix me
+        let rsp = unsafe { VirtAddr::new(build_user_stack(stack_top.as_u64(), entry, 0, 0, 0)) };// fix me
 
         unsafe { Cr3::write(old, Cr3Flags::empty()) };
 
@@ -463,17 +463,20 @@ fn align_up(addr: usize, align: usize) -> usize {
     (addr + align - 1) & !(align - 1)
 }
 
-pub unsafe fn build_user_stack(stack_top: u64) -> u64 {// recreating linux abi and arguments
+pub unsafe fn build_user_stack(
+    stack_top: u64,
+    entry: u64,
+    phdr: u64,
+    phent:u64,
+    phnum: u64,
+) -> u64 {// recreating linux abi and arguments
     let mut sp = stack_top;
 
+    // Write program name
     let prog = b"prog\0";
 
     sp -= prog.len() as u64;
     let prog_ptr = sp;
-
-    sp &= !0xF;// realigning after writing name
-    // println!("SP after align: {:#x}", sp);
-    // println!("prog_ptr: {:#x}", prog_ptr);
 
     unsafe {
         core::ptr::copy_nonoverlapping(
@@ -481,18 +484,54 @@ pub unsafe fn build_user_stack(stack_top: u64) -> u64 {// recreating linux abi a
             prog_ptr as *mut u8, 
             prog.len(),
         );
-    
+    }
+
+    // AT_RANDOM (16 bytes)
+    sp -= 16;
+    let random_ptr = sp;
+
+    unsafe {
+        *(random_ptr as *mut [u8; 16]) = [0u8; 16];// bad fixme
+    }
+
+    sp &= !0xF;// realigning after writing name
+    // println!("SP after align: {:#x}", sp);
+    // println!("prog_ptr: {:#x}", prog_ptr);
+
+    unsafe {
+        //AUKV (Key value pairs)
 
         push(&mut sp, 0);// AT_NULL
+        push(&mut sp, 0);
+
+        push(&mut sp, 25); // AT_RANDOM
+        push(&mut sp, random_ptr);
+
         push(&mut sp, 6);// AT_PAGESZ
+        push(&mut sp, 4096);
+
         push(&mut sp, 9);// AT_ENTRY
+        push(&mut sp, entry);
+
         push(&mut sp, 3);// AT_PHDR
-        push(&mut sp, 5);// AT_PHNM
+        push(&mut sp, phdr);
+
         push(&mut sp, 4);// AT_PHENT
+        push(&mut sp, phent);
+
+        push(&mut sp, 5);// AT_PHNM
+        push(&mut sp, phnum);
+
         push(&mut sp, 0);// envp
+
         push(&mut sp, 0);// argv
         push(&mut sp, prog_ptr);// argv[0]
+
         push(&mut sp, 1);// argc
+    }
+
+    if sp % 16 != 8 {
+        sp -= 8;
     }
 
     sp

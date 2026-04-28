@@ -11,8 +11,7 @@ pub struct Thread {
     context: Context,
     address_space: PhysFrame,
     state: ThreadState,
-    stack_top: VirtAddr,
-    pub kernel_stack_top: u64,
+    kernel_stack_top: VirtAddr,
 }
 
 impl Thread {
@@ -37,7 +36,7 @@ impl Thread {
                 //     Cr3::write(old, Cr3Flags::empty());
                 // }
                 // println!("about to alloc user stack");
-                let stack_top = memory.alloc_user_stack(pml4_frame);
+                let stack_top = memory.alloc_user_stack(pml4_frame, entry);
 
                 (pml4_frame, stack_top, entry)
             });
@@ -47,7 +46,7 @@ impl Thread {
         Self {
             context,
             state: ThreadState::Ready,
-            stack_top,
+            kernel_stack_top,
             address_space
         }
     }
