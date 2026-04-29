@@ -131,7 +131,7 @@ pub extern "C" fn syscall_handler(
 
 fn sys_write(fd: u64, buf: *const u8, len: u64) -> u64 {
     if fd != 1 && fd != 2 {
-        return -1i64 as u64; // EBADF later
+        return -1i64 as u64;
     }
 
     if buf.is_null() {
