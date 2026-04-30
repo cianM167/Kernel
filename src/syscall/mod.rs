@@ -38,18 +38,12 @@ pub fn enable_syscall() {
 
 pub fn init_syscalls(syscall_entry: u64) {
     unsafe {
-        // STAR: segment selector
-
-        // Bits:
-        // 63:48 = kernel CS
-        // 47:32 = user CS (with RPL=3)
-
         let kernel_cs: u64 = 0x08;
-        let user_cs: u64 = 0x18;
+        let user_base: u64 = 0x10;
 
         let star_value = 
-            (kernel_cs << 48) |
-            (user_cs << 32);
+            (user_base << 48) |
+            (kernel_cs << 32);
 
         Msr::new(IA32_STAR).write(star_value);
 
@@ -161,16 +155,13 @@ fn sys_read(fd: u64, buf: *mut u8, len: u64) -> u64 {
 
     let mut i = 0;
 
-    println!("got to loop after scanf call");
+    // println!("got to loop after scanf call");
     while i < len {
-        println!("loop entered");
         let byte = loop {
-            println!("looping");
             if let Some(b) = STDIN_BUFFER.lock().pop_front() {
                 print!("{}", b as char);
                 break b;
             }
-            println!("i make it past the lock");
 
             hlt();
             // threads::yield_now();

@@ -8,10 +8,10 @@
     -o printf_test.elf
 
 void _start() {
-    int a;
+    char buffer[100];
 
     printf("Please input a string you want to display on the screen\n");
-    scanf("%d", &a); 
-    printf("%d", a);
+    scanf("%s", &buffer); 
+    printf("\n\n%s\n        \\\n         \\\n            _~^~^~_\n        \\) /  o o  \\ (/\n          '_   -   _'\n          / '-----' \\ \n", buffer);
     exit(0);
 }

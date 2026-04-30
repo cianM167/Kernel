@@ -5,7 +5,7 @@ use crate::{allocator::{MemoryManager, USER_CODE_START, with_memory}, println, t
 
 pub mod scheduler;
 
-pub static USER_PROG: &[u8] = include_bytes!("../../user_programs/printf_test.elf");// ignore how awful the path is
+pub static USER_PROG: &[u8] = include_bytes!("../../user_programs/ferris_say.elf");// ignore how awful the path is
 
 pub struct Thread {
     context: Context,

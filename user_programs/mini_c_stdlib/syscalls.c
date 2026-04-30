@@ -187,11 +187,11 @@ void scanf(const char* fmt, ...) {
                 }
                 case 's': {
                     char* out = va_arg(args, char*);
-                    while (*input && *input != ' ') {
+                    while (*input && *input != '\n') {
                         *out++ = *input++;
                     }
                     *out = 0;
-                    if (*input == ' ') input++;
+                    if (*input == '\n') input++;
                 }
             }
         }

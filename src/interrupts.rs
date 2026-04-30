@@ -91,7 +91,7 @@ extern "x86-interrupt" fn keyboard_interrupt_handler(
     _stack_frame: InterruptStackFrame,
 ) {
     use x86_64::instructions::port::Port;
-    println!("keyboard");
+    // println!("keyboard");
     
     let mut port = Port::new(0x60);
     let scancode: u8 = unsafe { port.read() };
@@ -132,7 +132,10 @@ extern "x86-interrupt" fn general_protection_fault_handler(
     stack_frame: InterruptStackFrame,
     error_code: u64
 ) {
-    println!("GPF! Error code = {:#x}, RIP={:#x}", error_code, stack_frame.instruction_pointer.as_u64());
+    println!("=== GENERAL PROTECTION FAULT ===");
+    println!("Error code : {:#018x}", error_code);
+    println!("  Segment  : {:#06x} (GDT index {})", error_code, error_code >> 3);
+    println!("{:#?}", stack_frame);
     hlt_loop();
 }
 

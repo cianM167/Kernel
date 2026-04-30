@@ -140,7 +140,7 @@ pub unsafe fn enter_user_mode(entry: u64, user_stack: u64) -> ! {
             rip = in(reg) entry,
             rsp = in(reg) user_stack,
 
-            options(noreturn, nostack)
+            options(noreturn)
         );
     }
 }
