@@ -3,7 +3,7 @@ use lazy_static::lazy_static;
 use spin::Mutex;
 use x86_64::{VirtAddr, registers::control::{Cr3, Cr3Flags}};
 
-use crate::{allocator::{KERNEL_OFFSET, debug_walk, with_memory}, gdt::GDT, println, threads::{self, Context, Thread, ThreadState}};
+use crate::{allocator::{KERNEL_OFFSET, debug_walk, with_memory}, gdt::{GDT, TSS}, println, syscall::CPU_LOCAL, threads::{self, Context, Thread, ThreadState}};
 
 lazy_static! {
     pub static ref SCHEDULER: Mutex<Scheduler> = Mutex::new(Scheduler::new());
@@ -66,11 +66,14 @@ impl Scheduler {
                     // switch_context(old_ctx, new_ctx)
                 }
                 None => {
+                    let thread = &self.threads[next_id];
                     let new_ctx = &self.threads[next_id].context;
                     let frame = &self.threads[next_id].address_space;
                     
                     Cr3::write(*frame, Cr3Flags::empty());
                     println!("trying to switch to user mode");
+
+                    set_kernel_stack(thread.kernel_stack_top.as_u64());
 
                     // unsafe {
                     //     *((new_ctx.rsp - 8) as *mut u64) = 0xdeadbeef;
@@ -114,7 +117,7 @@ unsafe fn start_first_thread(ctx: &Context) -> ! {
 
 pub unsafe fn enter_user_mode(entry: u64, user_stack: u64) -> ! {
     let user_cs = (GDT.1.user_code.0 as u64) | 3;
-    let user_ds = (GDT.1.user_data.0 as u64) | 3;
+    let user_ss = (GDT.1.user_data.0 as u64) | 3;
 
     // println!("USER RIP = {:#x}", entry);
     // println!("USER RSP = {:#x}", user_stack);
@@ -123,29 +126,25 @@ pub unsafe fn enter_user_mode(entry: u64, user_stack: u64) -> ! {
         core::arch::asm!(
             // "cli", uuuhhhhh idk might fix shit
 
-            "mov ds, {ds}",
-            "mov es, {ds}",
-            "mov fs, {ds}",
-            "mov gs, {ds}",
-
-            "mov rax, {rip}",
-            "mov rbx, {rsp}",
-
             "push {ss}",
-            "push rbx",
+            "push {rsp}",
             "push 0x202",
             "push {cs}",
-            "push rax",
-
+            "push {rip}",
             "iretq",
 
-            ds = in(reg) user_ds,
-            ss = in(reg) user_ds,
             cs = in(reg) user_cs,
+            ss = in(reg) user_ss,
             rip = in(reg) entry,
             rsp = in(reg) user_stack,
 
             options(noreturn, nostack)
         );
+    }
+}
+
+pub fn set_kernel_stack(rsp: u64) {
+    unsafe {
+        CPU_LOCAL.kernel_rsp = rsp;
     }
 }

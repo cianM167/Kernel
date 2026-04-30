@@ -1,7 +1,7 @@
 use alloc::boxed::Box;
 use x86_64::{PhysAddr, VirtAddr, registers::control::{Cr3, Cr3Flags}, structures::paging::{Mapper, Page, PageTableFlags, PhysFrame}};
 
-use crate::{allocator::{USER_CODE_START, with_memory}, println, threads::scheduler::SCHEDULER};
+use crate::{allocator::{MemoryManager, USER_CODE_START, with_memory}, println, threads::scheduler::SCHEDULER};
 
 pub mod scheduler;
 
@@ -12,14 +12,15 @@ pub struct Thread {
     address_space: PhysFrame,
     state: ThreadState,
     stack_top: VirtAddr,
-    // pub kernel_stack_top: u64,
+    pub kernel_stack_top: VirtAddr,
 }
 
 impl Thread {
     pub fn new(_entry: u64) -> Self {
 
-        let (address_space, stack_top, entry) = 
+        let (address_space, stack_top, entry, kernel_stack_top) = 
             with_memory(|memory| {
+                let kernel_stack_top = memory.alloc_kernel_stack();
                 let pml4_frame = memory.new_address_space();
                 // memory.map_user_pages(pml4_frame).expect("shat the bed");
                 // memory.map_user_code(pml4_frame, VirtAddr::new(USER_CODE_START)).expect("shat þe bed");
@@ -37,9 +38,9 @@ impl Thread {
                 //     Cr3::write(old, Cr3Flags::empty());
                 // }
                 // println!("about to alloc user stack");
-                let stack_top = memory.alloc_user_stack(pml4_frame);
+                let stack_top = memory.alloc_user_stack(pml4_frame, entry);
 
-                (pml4_frame, stack_top, entry)
+                (pml4_frame, stack_top, entry, kernel_stack_top)
             });
 
         let context = Context::new_user(entry, stack_top);
@@ -48,7 +49,8 @@ impl Thread {
             context,
             state: ThreadState::Ready,
             stack_top,
-            address_space
+            address_space,
+            kernel_stack_top,
         }
     }
 }

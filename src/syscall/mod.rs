@@ -2,8 +2,6 @@ use x86_64::{VirtAddr, instructions::hlt, registers::model_specific::{Efer, Efer
 
 use crate::{print, println, task::keyboard::STDIN_BUFFER, threads};
 
-static mut KERNEL_STACK: [u8; 4096 * 4] = [0; 4096 * 4];
-
 const IA32_STAR: u32 = 0xC000_0081;
 const IA32_LSTAR: u32 = 0xC000_0082;
 const IA32_FMASK: u32 = 0xC000_0084;
@@ -14,7 +12,7 @@ pub struct CpuLocal {
     pub kernel_rsp: u64,
 }
 
-static mut CPU_LOCAL: CpuLocal = CpuLocal {
+pub static mut CPU_LOCAL: CpuLocal = CpuLocal {
     user_rsp: 0,
     kernel_rsp: 0,
 };
@@ -67,11 +65,17 @@ pub extern "C" fn syscall_entry() {
         core::arch::naked_asm!(
             "swapgs",
 
-            // save user rsp fixme later
-            "mov r12, rsp",
+            // // save user rsp fixme later
+            // "mov r12, rsp",
 
-            // switch to kernel stack
-            "lea rsp, [{stack} + {size}]",
+            // // switch to kernel stack
+            // "lea rsp, [{stack} + {size}]",
+
+            // save user rsp in gs
+            "mov qword ptr gs:[0], rsp",
+
+            // load kernel RSP from CPU local
+            "mov rsp, qword ptr gs:[8]",
 
             // align stack
             "and rsp, -16",
@@ -93,19 +97,15 @@ pub extern "C" fn syscall_entry() {
 
             "call {handler}",
 
-            "or r11, 0x200",// ensure fuckass interrupt flag is set
-
             "pop r11",
             "pop rcx",
 
             // restore user stack
-            "mov rsp, r12",
+            "mov rsp, qword ptr gs:[0]",
 
             "swapgs",
             "sysretq",
 
-            stack = sym KERNEL_STACK,
-            size = const 4096 * 4,
             handler = sym syscall_handler,
         );
     }

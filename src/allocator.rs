@@ -144,7 +144,7 @@ impl MemoryManager {
         rsp
     }
 
-    pub fn alloc_kernel_stack(&mut self) -> u64 {
+    pub fn alloc_kernel_stack(&mut self) -> VirtAddr {
         const STACK_SIZE: usize = 4096 * 4;
 
         // pick a high kernel address
@@ -177,7 +177,7 @@ impl MemoryManager {
             }
         }
 
-        stack_top
+        VirtAddr::new(stack_top)
     }
 
     pub fn new_address_space(&mut self) -> PhysFrame {
