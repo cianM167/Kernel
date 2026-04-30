@@ -3,7 +3,7 @@ use lazy_static::lazy_static;
 use spin::Mutex;
 use x86_64::{VirtAddr, registers::control::{Cr3, Cr3Flags}};
 
-use crate::{allocator::{KERNEL_OFFSET, debug_walk, with_memory}, gdt::{GDT, TSS}, println, syscall::CPU_LOCAL, threads::{self, Context, Thread, ThreadState}};
+use crate::{allocator::{KERNEL_OFFSET, debug_walk, with_memory}, gdt::{GDT, TSS, set_rsp0}, println, syscall::CPU_LOCAL, threads::{self, Context, Thread, ThreadState}};
 
 lazy_static! {
     pub static ref SCHEDULER: Mutex<Scheduler> = Mutex::new(Scheduler::new());
@@ -74,6 +74,8 @@ impl Scheduler {
                     println!("trying to switch to user mode");
 
                     set_kernel_stack(thread.kernel_stack_top.as_u64());
+
+                    set_rsp0(thread.kernel_stack_top);
 
                     // unsafe {
                     //     *((new_ctx.rsp - 8) as *mut u64) = 0xdeadbeef;

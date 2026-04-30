@@ -1,3 +1,5 @@
+use core::cell::UnsafeCell;
+
 use spin::Mutex;
 use x86_64::{VirtAddr};
 use x86_64::structures::tss::TaskStateSegment;
@@ -15,8 +17,11 @@ pub struct Selectors {
     pub user_code: SegmentSelector,
 }
 
+pub struct StaticTss(UnsafeCell<TaskStateSegment>);
+unsafe impl Sync for StaticTss {}
+
 lazy_static! {
-    pub static ref TSS: TaskStateSegment = {
+    pub static ref TSS: StaticTss = StaticTss(UnsafeCell::new({
         let mut tss = TaskStateSegment::new();
 
         // kernel stack for syscalls
@@ -36,7 +41,15 @@ lazy_static! {
         tss.interrupt_stack_table[DOUBLE_FAULT_IST_INDEX as usize] = df_end;
         
         tss
-    };
+    }));
+}
+
+pub fn set_rsp0(addr: VirtAddr) {
+    // only called during scheduler switches not to be used w concurrency
+
+    unsafe {
+        (*TSS.0.get()).privilege_stack_table[0] = addr;
+    }
 }
 
 lazy_static! {
@@ -46,10 +59,12 @@ lazy_static! {
         let code_selector = gdt.append(Descriptor::kernel_code_segment());
         let data_selector = gdt.append(Descriptor::kernel_data_segment());
 
-        let user_code_selector = gdt.append(Descriptor::user_code_segment());
         let user_data_selector = gdt.append(Descriptor::user_data_segment());
+        let user_code_selector = gdt.append(Descriptor::user_code_segment());
 
-        let tss_selector = gdt.append(Descriptor::tss_segment(&*TSS));
+        let tss_selector = unsafe {
+            gdt.append(Descriptor::tss_segment(&*TSS.0.get()))
+        };
 
         (
             gdt,
