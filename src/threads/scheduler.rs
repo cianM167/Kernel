@@ -10,9 +10,9 @@ lazy_static! {
 }
 
 pub struct Scheduler {
-    threads: Vec<Thread>,
+    pub threads: Vec<Thread>,
     run_queue: VecDeque<usize>,
-    current: Option<usize>,
+    pub current: Option<usize>,
 }
 
 impl Scheduler {

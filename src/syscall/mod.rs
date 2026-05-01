@@ -1,6 +1,6 @@
-use x86_64::{VirtAddr, instructions::hlt, registers::model_specific::{Efer, EferFlags, LStar, Msr}};
+use x86_64::{VirtAddr, instructions::hlt, registers::model_specific::{Efer, EferFlags, LStar, Msr}, structures::paging::{Page, PageTableFlags}};
 
-use crate::{print, println, task::keyboard::STDIN_BUFFER, threads};
+use crate::{allocator::with_memory, print, println, task::keyboard::STDIN_BUFFER, threads::{self, scheduler::{self, SCHEDULER}}};
 
 const IA32_STAR: u32 = 0xC000_0081;
 const IA32_LSTAR: u32 = 0xC000_0082;
@@ -118,6 +118,7 @@ pub extern "C" fn syscall_handler(
     match num {
         0 => sys_read(arg1, arg2 as *mut u8, arg3),
         1 => sys_write(arg1, arg2 as * const u8, arg3),
+        12 => sys_brk(arg1),
         60 => sys_exit(arg1),
         _ => -1i64 as u64,
     }
@@ -179,4 +180,55 @@ fn sys_read(fd: u64, buf: *mut u8, len: u64) -> u64 {
     }
 
     i
+}
+
+fn sys_brk(new_break: u64) -> u64 {
+    let mut scheduler = SCHEDULER.lock();
+    let thread = match scheduler.current {
+        Some(id) => &mut scheduler.threads[id],
+        None => return 0,
+    };
+
+    let new_break = VirtAddr::new(new_break);
+
+    if new_break.as_u64() == 0 {
+        return thread.heap_end.as_u64();
+    }
+
+    if new_break < thread.heap_start || new_break.as_u64() > 0x0000_0000_6000_0000 {
+        return thread.heap_end.as_u64();
+    }
+
+    if new_break > thread.heap_end {
+        let start_page = Page::containing_address(thread.heap_end);
+        let end_page = Page::containing_address(new_break- 1);
+        let address_space = thread.address_space;
+
+        let old_end = thread.heap_end;
+        drop(thread);
+        drop(scheduler);
+
+        let flags = PageTableFlags::PRESENT
+            | PageTableFlags::WRITABLE
+            | PageTableFlags::USER_ACCESSIBLE
+            | PageTableFlags::NO_EXECUTE;
+
+        with_memory(|memory| {
+            let mut mapper = unsafe { memory.mapper_for(address_space) };
+
+            for page in Page::range_inclusive(start_page, end_page) {
+                memory.alloc_page(page, flags, &mut mapper)
+                    .expect("brk: page alloc failed");
+            }
+        });
+
+        let mut scheduler = SCHEDULER.lock();
+        if let Some(id) = scheduler.current {
+            scheduler.threads[id].heap_end = new_break;
+        }
+    } else {
+        thread.heap_end = new_break;
+    }
+
+    new_break.as_u64()
 }

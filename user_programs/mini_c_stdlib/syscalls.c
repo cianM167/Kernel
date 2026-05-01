@@ -214,3 +214,17 @@ int atoi(const char *strg) {// geeksforgeeks my beloved
 
     return res;
 }
+
+static inline void* brk(void* addr) {
+    register long rax __asm__("rax") = 12;
+    register long rdi __asm__("rdi") = (long)addr;
+
+    asm volatile (
+        "syscall"
+        : "+r"(rax)
+        : "r"(rdi)
+        : "rcx", "r11", "memory"
+    );
+
+    return (void*)rax;
+}

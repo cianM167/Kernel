@@ -75,7 +75,8 @@ fn kernel_main(boot_info: &'static BootInfo) -> ! {
         memory.init_heap().expect("heap initialization failed");
     });
 
-    println!("Hello I am the kernel\n        \\\n         \\\n            _~^~^~_\n        \\) /  o o  \\ (/\n          '_   -   _'\n          / '-----' \\");
+    // println!("Hello I am the kernel\n        \\\n         \\\n            _~^~^~_\n        \\) /  o o  \\ (/\n          '_   -   _'\n          / '-----' \\");
+    println!(" ^-^\n(o.o)\n\\   /\n | |");
 
     // unsafe { Cr3::write(pml4_frame, Cr3Flags::empty()) };
 

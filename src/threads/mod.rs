@@ -5,14 +5,18 @@ use crate::{allocator::{MemoryManager, USER_CODE_START, with_memory}, println, t
 
 pub mod scheduler;
 
+//
+
 pub static USER_PROG: &[u8] = include_bytes!("../../user_programs/ferris_say.elf");// ignore how awful the path is
 
 pub struct Thread {
     context: Context,
-    address_space: PhysFrame,
+    pub address_space: PhysFrame,
     state: ThreadState,
     stack_top: VirtAddr,
     pub kernel_stack_top: VirtAddr,
+    pub heap_start: VirtAddr,
+    pub heap_end: VirtAddr,
 }
 
 impl Thread {
@@ -45,12 +49,16 @@ impl Thread {
 
         let context = Context::new_user(entry, stack_top);
 
+        let heap_start = VirtAddr::new(0x0000_0000_2000_000);
+
         Self {
             context,
             state: ThreadState::Ready,
             stack_top,
             address_space,
             kernel_stack_top,
+            heap_start,
+            heap_end: heap_start,
         }
     }
 }
