@@ -6,6 +6,7 @@
 // gcc -nostdlib -static -fno-pie -no-pie -fno-builtin -fno-stack-protector \
     rock_paper_scissors.c \
     mini_c_stdlib/syscalls.c \
+    mini_c_stdlib/malloc.c \
     -o rock_paper_scissors.elf
 
 int random_buff[100];
@@ -26,7 +27,7 @@ void _start() {
 
     int* a = malloc(100 * sizeof(int));
 
-    for (int i = 0; i < 100; i++) {
+    for (int i = 0; i < 800; i++) {
         printf("%d\n", a[i]);
     }
 

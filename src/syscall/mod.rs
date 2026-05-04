@@ -1,4 +1,4 @@
-use x86_64::{VirtAddr, instructions::hlt, registers::model_specific::{Efer, EferFlags, LStar, Msr}, structures::paging::{Page, PageTableFlags}};
+use x86_64::{VirtAddr, instructions::hlt, registers::model_specific::{Efer, EferFlags, LStar, Msr}, structures::paging::{Mapper, Page, PageTableFlags, page}};
 
 use crate::{allocator::with_memory, print, println, task::keyboard::STDIN_BUFFER, threads::{self, scheduler::{self, SCHEDULER}}};
 
@@ -79,15 +79,16 @@ pub extern "C" fn syscall_entry() {
             "push r11",
 
             // preserve original registers first
-            "mov r13, rdi",   // save arg1 (fd)
-            "mov r14, rsi",   // save arg2 (buf)
-            "mov r15, rdx",   // save arg3 (len)
+            "mov r12, rdi",  // save arg1 before we clobber rdi
+            "mov r13, rsi",  // save arg2
+            "mov r14, rdx",  // save arg3
+            "mov r15, r10",  // save arg4 (r10 on Linux ABI)
 
-            // now set up Rust ABI
-            "mov rdi, rax",   // num
-            "mov rsi, r13",   // arg1
-            "mov rdx, r14",   // arg2
-            "mov rcx, r15",   // arg3
+            "mov rdi, rax",  // num
+            "mov rsi, r12",  // arg1
+            "mov rdx, r13",  // arg2
+            "mov rcx, r14",  // arg3
+            "mov r8,  r15",  // arg4
 
             "call {handler}",
 
@@ -118,6 +119,8 @@ pub extern "C" fn syscall_handler(
     match num {
         0 => sys_read(arg1, arg2 as *mut u8, arg3),
         1 => sys_write(arg1, arg2 as * const u8, arg3),
+        9 => sys_mmap(arg1, arg2, arg3, arg4, arg5, arg6),
+        11 => sys_munmap(arg1, arg2),
         12 => sys_brk(arg1),
         60 => sys_exit(arg1),
         _ => -1i64 as u64,
@@ -231,4 +234,87 @@ fn sys_brk(new_break: u64) -> u64 {
     }
 
     new_break.as_u64()
+}
+
+// mmap flags/prot constants matching Linux ABI
+const PROT_READ:    u64 = 0x1;
+const PROT_WRITE:   u64 = 0x2;
+const PROT_EXEC:    u64 = 0x4;
+const MAP_PRIVATE:  u64 = 0x2;
+const MAP_ANONYMOUS:u64 = 0x20;
+const MAP_FIXED:    u64 = 0x10;
+
+fn sys_mmap(addr: u64, len: u64, prot: u64, flags: u64, fd: u64, offset: u64) -> u64 {
+    // file backed mapping is cringe not doin all that
+    if flags & MAP_ANONYMOUS == 0 {
+        println!("mmap: file-backed not supported");
+        return -1i64 as u64;
+    }
+
+    if len == 0 {
+        return -1i64 as u64;
+    }
+
+    let len_aligned = (len + 0xFFF) & !0xFFF;
+
+    let mut page_flags = PageTableFlags::PRESENT
+        | PageTableFlags::USER_ACCESSIBLE;
+
+    if prot & PROT_WRITE != 0 {
+        page_flags |= PageTableFlags::WRITABLE;
+    }
+
+    if prot &  PROT_EXEC == 0 {
+        page_flags |= PageTableFlags::NO_EXECUTE;
+    }
+
+    let (address_space, map_addr) = {
+        let mut scheduler = SCHEDULER.lock();
+        let thread = match scheduler.current {
+            Some(id) => &mut scheduler.threads[id],
+            None => return -1i64 as u64,
+        };
+
+        let map_addr = if flags & MAP_FIXED != 0 && addr != 0 {
+            // caller specified address
+            if addr % 0x1000 != 0 {
+                return -1i64 as u64;
+            }
+            addr
+        } else {
+            let candidate = thread.mmap_top;
+            thread.mmap_top += len_aligned;
+            candidate
+        };
+
+        (thread.address_space, map_addr)
+    };
+
+    with_memory(|memory| {
+        let mut mapper = unsafe { memory.mapper_for(address_space) };
+
+        let start_page = Page::containing_address(VirtAddr::new(map_addr));
+        let end_page = Page::containing_address(
+            VirtAddr::new(map_addr + len_aligned - 1)
+        );
+
+        for page in Page::range_inclusive(start_page, end_page) {
+            if flags & MAP_FIXED != 0 && mapper.translate_page(page).is_ok() {
+                continue;
+            }
+
+            memory.alloc_page(page, page_flags, &mut mapper)
+                .expect("mmap: alloc_page faile");
+        }
+    });
+
+    unsafe {
+        core::ptr::write_bytes(map_addr as *mut u8, 0, len_aligned as usize);
+    }
+
+    map_addr
+}
+
+fn sys_munmap(addr: u64, len: u64) -> u64 {
+    0// yummy memory leak
 }

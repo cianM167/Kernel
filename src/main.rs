@@ -15,7 +15,7 @@ use core::{panic::PanicInfo, sync::atomic::Ordering, arch::asm};
 
 use alloc::{boxed::Box, vec, rc::Rc, vec::Vec};
 use bootloader::{BootInfo, entry_point};
-use meowl::{MEMORY, allocator::{self, MemoryManager, with_memory}, hlt_loop, interrupts::TIMER, memory::BootInfoFrameAllocator, task::{Task, executor::Executor, keyboard, simple_executor::SimpleExecutor}, threads::{Thread, scheduler::{SCHEDULER, Scheduler}}};
+use meowl::{MEMORY, allocator::{self, MemoryManager, with_memory}, hlt_loop, interrupts::TIMER, memory::BootInfoFrameAllocator, task::{Task, executor::Executor, keyboard, simple_executor::SimpleExecutor}, threads::{Thread, scheduler::{SCHEDULER, Scheduler, schedule}}};
 use spin::{Mutex};
 use x86_64::{VirtAddr, registers::control::{Cr3, Cr3Flags}, structures::paging::{Mapper, OffsetPageTable, Page, PageTable, Translate}};
 
@@ -123,7 +123,7 @@ fn kernel_main(boot_info: &'static BootInfo) -> ! {
     // unsafe { Cr3::write(pml4_frame, Cr3Flags::empty()) };
 
     SCHEDULER.lock().spawn(Thread::new(0));
-    SCHEDULER.lock().schedule();
+    schedule();
 
     // let mut executor = Executor::new();
     // executor.spawn(Task::new(example_task()));
