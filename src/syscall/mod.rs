@@ -122,7 +122,14 @@ pub extern "C" fn syscall_handler(
         9 => sys_mmap(arg1, arg2, arg3, arg4, arg5, arg6),
         11 => sys_munmap(arg1, arg2),
         12 => sys_brk(arg1),
+        13 => sys_rt_sigaction(arg1, arg2, arg3),
+        14 => sys_rt_sigprocmask(arg1, arg2, arg3, arg4),
+        218 => sys_set_tid_address(arg1),
+        231 => sys_exit_group(arg1),
+        39  => sys_getpid(),
+        63  => sys_uname(arg1),
         60 => sys_exit(arg1),
+        158 => sys_arch_prctl(arg1, arg2),
         _ => -1i64 as u64,
     }
 }
@@ -317,4 +324,83 @@ fn sys_mmap(addr: u64, len: u64, prot: u64, flags: u64, fd: u64, offset: u64) ->
 
 fn sys_munmap(addr: u64, len: u64) -> u64 {
     0// yummy memory leak
+}
+
+const ARCH_SET_GS: u64 = 0x1001;
+const ARCH_SET_FS: u64 = 0x1002;
+const ARCH_GET_FS: u64 = 0x1003;
+const ARCH_GET_GS: u64 = 0x1004;
+
+const IA32_FS_BASE: u32 = 0xC0000100;
+
+fn sys_arch_prctl(code: u64, addr: u64) -> u64 {
+    unsafe {
+        match code {
+            ARCH_SET_FS => {
+                Msr::new(IA32_FS_BASE).write(addr);
+                0
+            }
+            ARCH_GET_FS => {
+                Msr::new(IA32_FS_BASE).read()
+            }
+            ARCH_SET_GS => {
+                println!("arch_prctl: ARCH_SET_GS ignored (kernel uses GS)");
+                0
+            }
+            ARCH_GET_GS => {
+                Msr::new(IA32_GS_BASE).read()
+            }
+            _ => {
+                println!("arch_prctl: unknown code {:#x}", code);
+                -1i64 as u64
+            }
+        }
+    }
+}
+
+fn sys_rt_sigaction(_signum: u64, _act: u64, _oldact: u64) -> u64 {
+    0 //pretend it worked
+}
+
+fn sys_rt_sigprocmask(_how: u64, _set: u64, _oldset: u64, _sigsetsize: u64) -> u64 {
+    0
+}
+
+fn sys_set_tid_address(_tidptr: u64) -> u64 {
+    1
+}
+
+fn sys_exit_group(code: u64) -> u64 {
+    println!("Process exited (group): {}", code);
+    loop {}
+}
+
+fn sys_getpid() -> u64 {
+    1    
+}
+
+fn sys_uname(buf: u64) -> u64 {
+    // struct utsname has 6 fields of 65 bytes each
+    // glibc checks sysname and release
+    if buf == 0 { return -1i64 as u64; }
+
+    unsafe {
+        let base = buf as *mut u8;
+        // zero the whole struct first (6 * 65 = 390 bytes)
+        core::ptr::write_bytes(base, 0, 390);
+
+        // sysname (offset 0)
+        let sysname = b"MeowlOs\0";
+        core::ptr::copy_nonoverlapping(sysname.as_ptr(), base, sysname.len());
+
+        // release (offset 65) — glibc parses this as a version number
+        let release = b"1.0.0\0";
+        core::ptr::copy_nonoverlapping(release.as_ptr(), base.add(65), release.len());
+
+        // machine (offset 260)
+        let machine = b"x86_64\0";
+        core::ptr::copy_nonoverlapping(machine.as_ptr(), base.add(260), machine.len());
+    }
+
+    0
 }

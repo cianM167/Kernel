@@ -1,4 +1,5 @@
-#include "mini_c_stdlib/syscalls.h"
+// #include "mini_c_stdlib/syscalls.h"
+# include <stdio.h>
 
 //to compile with simple stdlib
 
