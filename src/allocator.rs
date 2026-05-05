@@ -18,7 +18,7 @@ pub mod fixed_size_block;
 pub const KERNEL_OFFSET: u64 = 0xffff_8000_0000_0000;
 
 pub const HEAP_START: usize = 0x4444_4444_0000;
-pub const HEAP_SIZE: usize = 100 * 1024; // 100 Kib
+pub const HEAP_SIZE: usize = 4 * 1024 * 1024; // 100 Kib
 
 pub const USER_CODE_START: u64 = 0x400000;
 
@@ -28,7 +28,7 @@ const USER_BASE: u64 = 0x1000_0000;
 pub struct MemoryManager {
     pub phys_mem_offset: VirtAddr,
     pub kernel_mapper: OffsetPageTable<'static>,
-    frame_allocator: BootInfoFrameAllocator,
+    pub frame_allocator: BootInfoFrameAllocator,
 }
 
 impl MemoryManager {

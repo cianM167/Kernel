@@ -1,4 +1,4 @@
-use x86_64::{VirtAddr, instructions::hlt, registers::model_specific::{Efer, EferFlags, LStar, Msr}, structures::paging::{Mapper, Page, PageTableFlags, page}};
+use x86_64::{VirtAddr, instructions::hlt, registers::model_specific::{Efer, EferFlags, LStar, Msr}, structures::paging::{Mapper, Page, PageTableFlags, Size4KiB, page}};
 
 use crate::{allocator::with_memory, print, println, task::keyboard::STDIN_BUFFER, threads::{self, scheduler::{self, SCHEDULER}}};
 
@@ -130,6 +130,13 @@ pub extern "C" fn syscall_handler(
         63  => sys_uname(arg1),
         60 => sys_exit(arg1),
         158 => sys_arch_prctl(arg1, arg2),
+        273 => sys_set_robust_list(arg1, arg2),
+        334 => sys_rseq(arg1, arg2, arg3, arg4),
+        302 => sys_prlimit64(arg1, arg2, arg3, arg4),
+        318 => sys_getrandom(arg1, arg2, arg3),
+        267 => sys_readlinkat(arg1, arg2, arg3, arg4),
+        10  => sys_mprotect(arg1, arg2, arg3),
+        5   => sys_fstat(arg1, arg2),
         _ => -1i64 as u64,
     }
 }
@@ -376,7 +383,7 @@ fn sys_exit_group(code: u64) -> u64 {
 }
 
 fn sys_getpid() -> u64 {
-    1    
+    1 // me when i lie
 }
 
 fn sys_uname(buf: u64) -> u64 {
@@ -402,5 +409,103 @@ fn sys_uname(buf: u64) -> u64 {
         core::ptr::copy_nonoverlapping(machine.as_ptr(), base.add(260), machine.len());
     }
 
+    0
+}
+
+fn sys_set_robust_list(_head: u64, _len: u64) -> u64 {
+    0
+}
+
+fn sys_rseq(_rseq: u64, _rseq_len: u64, _flags: u64, _sig: u64) -> u64 {
+    // incorrect handled by glibc
+    (-38i64) as u64
+}
+
+fn sys_prlimit64(_pid: u64, _resource: u64, _new: u64, old: u64) -> u64 {
+    if old != 0 {
+        // write a fake rlimit
+        unsafe {
+            *(old as *mut u64) = 8 * 1024 * 1024;
+            *(old as *mut u64).add(1) = u64::MAX;
+        }
+    }
+    0
+}
+
+fn sys_getrandom(buf: u64, len: u64, _flags: u64) -> u64 {
+    if buf == 0 { return (-1i64) as u64; }
+
+    static mut SEED: u64 = 0xdeadbeefcafe1234;// bad 
+    unsafe {
+        let ptr = buf as *mut u8;
+        for i in 0..len as usize {
+            SEED = SEED.wrapping_mul(6364136223846793005)
+                        .wrapping_add(1442695040888963407);// really really secure
+            *ptr.add(i) = (SEED >> 33) as u8;
+        }
+    }
+    len
+}
+
+// fake path as we dont have a file system
+fn sys_readlinkat(_dirfd: u64, path: u64, buf: u64, bufsiz: u64) -> u64 {
+    let fake_path = b"/hello_world.elf";
+    let copy_len = fake_path.len().min(bufsiz as usize);
+    unsafe {
+        core::ptr::copy_nonoverlapping(
+            fake_path.as_ptr(),
+            buf as *mut u8,
+            copy_len,
+        );
+    }
+    copy_len as u64
+}
+
+// changing page flags
+fn sys_mprotect(addr: u64, len: u64, prot: u64) -> u64 {
+    let start_page: Page<Size4KiB> = Page::containing_address(VirtAddr::new(addr));
+    let end_page   = Page::containing_address(VirtAddr::new(addr + len - 1));
+
+    let mut flags = PageTableFlags::PRESENT | PageTableFlags::USER_ACCESSIBLE;
+    if prot & 0x2 != 0 { flags |= PageTableFlags::WRITABLE; }
+    if prot & 0x4 == 0 { flags |= PageTableFlags::NO_EXECUTE; }
+
+    let address_space = {
+        let scheduler = SCHEDULER.lock();
+        match scheduler.current {
+            Some(id) => scheduler.threads[id].address_space,
+            None => return (-1i64) as u64,
+        }
+    };
+
+    with_memory(|memory| {
+        let mut mapper = unsafe { memory.mapper_for(address_space) };
+        for page in Page::range_inclusive(start_page, end_page) {
+            unsafe {
+                if let Ok(phys) = mapper.translate_page(page) {
+                    // remap with new flags
+                    mapper.unmap(page).unwrap().1.flush();
+                    mapper.map_to(page, phys, flags, &mut memory.frame_allocator)
+                        .unwrap()
+                        .flush();
+                }
+            }
+        }
+    });
+
+    0
+}
+
+fn sys_fstat(fd: u64, statbuf: u64) -> u64 {
+    if statbuf == 0 { return (-1i64) as u64; }
+    unsafe {
+        // zero the whole stat struct (144 bytes on x86_64)
+        core::ptr::write_bytes(statbuf as *mut u8, 0, 144);
+        let buf = statbuf as *mut u64;
+        // st_mode at offset 24 — S_IFIFO|0600 (pipe) for fd 0/1/2
+        // mode is u32 at offset 24
+        let mode_ptr = (statbuf + 24) as *mut u32;
+        *mode_ptr = 0o010600; // S_IFIFO | 0600
+    }
     0
 }
