@@ -504,23 +504,23 @@ pub unsafe fn build_user_stack(
         push(&mut sp, 0);// AT_NULL
         push(&mut sp, 0);
 
-        push(&mut sp, 25); // AT_RANDOM
-        push(&mut sp, random_ptr);
+        push(&mut sp, random_ptr);// AT_RANDOM
+        push(&mut sp, 25);
 
-        push(&mut sp, 6);// AT_PAGESZ
-        push(&mut sp, 4096);
+        push(&mut sp, 4096);// AT_PAGESZ
+        push(&mut sp, 6);
 
-        push(&mut sp, 9);// AT_ENTRY
-        push(&mut sp, entry);
+        push(&mut sp, entry);// AT_ENTRY
+        push(&mut sp, 9);
 
-        push(&mut sp, 3);// AT_PHDR
-        push(&mut sp, phdr);
+        push(&mut sp, phdr);// AT_PHDR
+        push(&mut sp, 3);
 
-        push(&mut sp, 4);// AT_PHENT
-        push(&mut sp, phent);
+        push(&mut sp, phent);// AT_PHENT
+        push(&mut sp, 4);
 
-        push(&mut sp, 5);// AT_PHNM
-        push(&mut sp, phnum);
+        push(&mut sp, phnum);// AT_PHNM
+        push(&mut sp, 5);
 
         push(&mut sp, 0);// envp
 

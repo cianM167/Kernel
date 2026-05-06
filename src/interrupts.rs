@@ -161,6 +161,7 @@ extern "x86-interrupt" fn unknown_exception(
 
 extern "x86-interrupt" fn unknown_exception_no_error(stack_frame: InterruptStackFrame) {
     println!("Unknown exception (no error code)!");
+    println!("{:#?}", stack_frame);
     println!("RIP={:#x}", stack_frame.instruction_pointer.as_u64());
     hlt_loop();
 }

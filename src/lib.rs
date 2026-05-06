@@ -12,6 +12,7 @@ extern crate alloc;
 #[cfg(test)]
 use bootloader::{BootInfo, entry_point};
 use spin::Mutex;
+use x86_64::registers::control::{Cr0, Cr0Flags, Cr4, Cr4Flags};
 
 use crate::{allocator::MemoryManager, syscall::{enable_syscall, init_gs, init_syscalls, syscall_entry}};
 
@@ -46,6 +47,7 @@ pub fn exit_qemu(exit_code: QemuExitCode) {
 pub fn init() {
     gdt::init();
     interrupts::init_idt();
+    enable_sse();
     unsafe { interrupts::PICS.lock().initialize() };
     x86_64::instructions::interrupts::enable();
 
@@ -105,4 +107,18 @@ fn test_kernel_main(_boot_info: &'static BootInfo) -> ! {
 #[panic_handler]
 fn panic(info: &PanicInfo) -> ! {
     test_panic_handler(info)
+}
+
+pub fn enable_sse() {
+    unsafe {
+        Cr0::update(|cr0| {
+            cr0.remove(Cr0Flags::EMULATE_COPROCESSOR);
+            cr0.insert(Cr0Flags::MONITOR_COPROCESSOR);
+        });
+
+        Cr4::update(|cr4| {
+            cr4.insert(Cr4Flags::OSFXSR);
+            cr4.insert(Cr4Flags::OSXMMEXCPT_ENABLE);
+        });
+    }
 }
