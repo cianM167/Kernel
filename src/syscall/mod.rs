@@ -345,6 +345,9 @@ fn sys_arch_prctl(code: u64, addr: u64) -> u64 {
         match code {
             ARCH_SET_FS => {
                 Msr::new(IA32_FS_BASE).write(addr);
+
+                let readback = Msr::new(0xC0000100).read();
+                println!("FS set to {:#x}, readback {:#x}", addr, readback);
                 0
             }
             ARCH_GET_FS => {
