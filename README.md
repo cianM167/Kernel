@@ -1,5 +1,5 @@
 # Instructions
-## writing userspace programs
+## Writing userspace programs
 The kernel has a limited number of syscalls callable by user programs.
 To make these easier to use there is a small C standard library included with the kernel
 C Lib:
