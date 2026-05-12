@@ -11,13 +11,11 @@
 // run in qemu
 // qemu-system-x86_64 -drive format=raw,file=target/x86_64-meowl_os/release/bootimage-meowl.bin
 
-use core::{panic::PanicInfo, sync::atomic::Ordering, arch::asm};
+use core::{panic::PanicInfo, arch::asm};
 
-use alloc::{boxed::Box, vec, rc::Rc, vec::Vec};
 use bootloader::{BootInfo, entry_point};
-use meowl::{MEMORY, allocator::{self, MemoryManager, with_memory}, hlt_loop, interrupts::TIMER, memory::BootInfoFrameAllocator, task::{Task, executor::Executor, keyboard, simple_executor::SimpleExecutor}, threads::{Thread, scheduler::{SCHEDULER, Scheduler, schedule}}};
-use spin::{Mutex};
-use x86_64::{VirtAddr, registers::control::{Cr3, Cr3Flags}, structures::paging::{Mapper, OffsetPageTable, Page, PageTable, Translate}};
+use meowl::{MEMORY, allocator::{self, MemoryManager, with_memory}, hlt_loop, threads::{Thread, scheduler::{SCHEDULER, schedule}}};
+use x86_64::{VirtAddr, registers::control::{Cr3}};
 
 extern crate alloc;
 
@@ -77,6 +75,7 @@ fn kernel_main(boot_info: &'static BootInfo) -> ! {
 
     // println!("Hello I am the kernel\n        \\\n         \\\n            _~^~^~_\n        \\) /  o o  \\ (/\n          '_   -   _'\n          / '-----' \\");
     println!(" ^-^\n(o.o)\n\\   /\n | |");
+    println!("MeowlOs version 1.0");
 //     println!("
 //                %##                              %#%#\n                   
 //                %#####                        ##*###%\n                   
@@ -147,22 +146,22 @@ fn panic(info: &PanicInfo) -> ! {
     meowl::test_panic_handler(info)
 }
 
-async fn async_number() -> u32 {
-    42
-}
+// async fn async_number() -> u32 {
+//     42
+// }
 
-async fn example_task() {
-    let number = async_number().await;
-    println!("async number: {}", number);
-}
+// async fn example_task() {
+//     let number = async_number().await;
+//     println!("async number: {}", number);
+// }
 
-fn test() -> ! {
-    loop {
-        unsafe {
-            core::arch::asm!("nop");
-        }
-    }
-}
+// fn test() -> ! {
+//     loop {
+//         unsafe {
+//             core::arch::asm!("nop");
+//         }
+//     }
+// }
 
 #[inline(always)]
 fn read_rsp() -> u64 {

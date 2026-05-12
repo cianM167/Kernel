@@ -1,4 +1,3 @@
-use alloc::boxed::Box;
 use x86_64::{PhysAddr, VirtAddr, registers::control::{Cr3, Cr3Flags}, structures::paging::{Mapper, Page, PageTableFlags, PhysFrame}};
 
 use crate::{allocator::{MemoryManager, USER_CODE_START, with_memory}, println, threads::scheduler::SCHEDULER};
@@ -9,7 +8,7 @@ pub mod scheduler;
 // o.o
 //\   /
 // | |
-pub static USER_PROG: &[u8] = include_bytes!("../../user_programs/hello_world.elf");// ignore how awful the path is
+pub static USER_PROG: &[u8] = include_bytes!("../../user_programs/ferris_say.elf");// ignore how awful the path is
 
 pub struct Thread {
     pub context: Context,

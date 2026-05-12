@@ -1,12 +1,9 @@
-use core::{alloc::GlobalAlloc, ptr::null_mut};
-
 use alloc::vec::Vec;
 use bootloader::bootinfo::MemoryMap;
-use linked_list_allocator::LockedHeap;
 use x86_64::{PhysAddr, VirtAddr, registers::control::{Cr3, Cr3Flags}, structures::paging::{FrameAllocator, Mapper, OffsetPageTable, Page, PageTable, PageTableFlags, PhysFrame, Size4KiB, Translate, frame, mapper::MapToError}};
 use xmas_elf::{ElfFile, program::{ProgramHeader, Type}};
 
-use crate::{MEMORY, allocator::{bump::{BumpAllocator, Locked}, fixed_size_block::FixedSizeBlockAllocator, linked_list::LinkedListAllocator}, memory::{self, BootInfoFrameAllocator, active_level_4_table}, println, serial_println};
+use crate::{MEMORY, allocator::{bump::{Locked}, fixed_size_block::FixedSizeBlockAllocator}, memory::{self, BootInfoFrameAllocator, active_level_4_table}, println};
 
 #[global_allocator]
 static ALLOCATOR: Locked<FixedSizeBlockAllocator> = Locked::new(FixedSizeBlockAllocator::new());
