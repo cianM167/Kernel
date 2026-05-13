@@ -10,7 +10,6 @@
     -o rock_paper_scissors.elf
 
 void _start() {
-    printf("rock started");
     int loop = 1;
     int player_choice;
     int computer_choice;
@@ -20,13 +19,15 @@ void _start() {
     // 2 paper
     // 3 scissors
 
-    int* a = malloc(100 * sizeof(int));
+    int* a = malloc(2 * sizeof(int));
 
     printf("allocated memory:\n");
 
-    for (int i = 0; i < 100; i++) {
-        printf("%d\n", a[i]);
-    }
+    a[0] = 10;
+    a[1] = 11;
+    a[0] = 12;
+
+    printf("a[0]: %d, a[1]: %d, a[100]: %d\n", a[0], a[1], a[10000000000]);
 
     exit(0);
 }

@@ -31,7 +31,6 @@ static Block* request_space(unsigned long size) {
 }
 
 void* malloc(unsigned long size) {
-    printf("entered malloc\n");
     if (size == 0) return 0;
     size = ALIGN8(size);
 
@@ -48,13 +47,11 @@ void* malloc(unsigned long size) {
     }
 
     Block* b = request_space(size);
-    printf("malloc end\n");
     if (!b) return 0;
 
     if (prev) prev->next = b;
     else heap_head = b;
 
-    printf("malloc end\n");
     return (void*)(b + 1);
 }
 
