@@ -45,6 +45,8 @@ lazy_static! {
     static ref IDT: InterruptDescriptorTable = {
         let mut idt = InterruptDescriptorTable::new();
 
+        idt.debug.set_handler_fn(debug_handler);
+
         idt.breakpoint.set_handler_fn(breakpoint_handler)
             .set_privilege_level(PrivilegeLevel::Ring3);
         idt.page_fault.set_handler_fn(page_fault_handler);
@@ -163,6 +165,13 @@ extern "x86-interrupt" fn unknown_exception_no_error(stack_frame: InterruptStack
     println!("Unknown exception (no error code)!");
     println!("{:#?}", stack_frame);
     println!("RIP={:#x}", stack_frame.instruction_pointer.as_u64());
+    hlt_loop();
+}
+
+extern "x86-interrupt" fn debug_handler(
+    mut stack_frame: InterruptStackFrame,
+) {
+    println!("im stopped");
     hlt_loop();
 }
 

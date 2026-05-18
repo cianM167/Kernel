@@ -1,7 +1,7 @@
 use alloc::{collections::VecDeque, vec::Vec};
 use lazy_static::lazy_static;
 use spin::Mutex;
-use x86_64::{VirtAddr, registers::control::{Cr3, Cr3Flags}};
+use x86_64::{VirtAddr, registers::control::{Cr3, Cr3Flags}, structures::paging::PhysFrame};
 
 use crate::{allocator::{KERNEL_OFFSET, debug_walk, with_memory}, gdt::{GDT, TSS, set_rsp0}, println, syscall::CPU_LOCAL, threads::{self, Context, Thread, ThreadState}};
 
@@ -134,7 +134,12 @@ pub fn schedule() {
 
                 // switch_context(old_ctx, new_ctx)
             }
-            None => {              
+            None => {         
+                // println!("entry:  {:#x}", entry);
+                // println!("rsp:    {:#x}", rsp);
+                // println!("kstack: {:#x}", kstack);
+                // println!("frame:  {:#x}", frame.start_address());
+
                 Cr3::write(frame, Cr3Flags::empty());
                 println!("trying to switch to user mode");
 
@@ -151,8 +156,22 @@ pub fn schedule() {
                 //     debug_walk(VirtAddr::new(new_ctx.rsp - 8), memory.phys_mem_offset);
                 // });
 
+                set_hw_breakpoint(entry);
+
                 enter_user_mode(entry, rsp);
             }
         }
     }
 }
+
+pub unsafe fn set_hw_breakpoint(addr: u64) {
+    unsafe {
+        core::arch::asm!(
+            "mov dr0, {addr}",
+            "mov dr7, {dr7}",
+            addr = in(reg) addr,
+            dr7 = in(reg) 0b11u64,
+        );
+    }
+}
+ 
