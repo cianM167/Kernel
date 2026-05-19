@@ -28,6 +28,13 @@ pub struct MemoryManager {
     pub frame_allocator: BootInfoFrameAllocator,
 }
 
+pub struct LoadedElf {
+        pub entry: u64,
+        pub phdr: u64,
+        pub phent: u64,
+        pub phnum: u64,
+    }
+
 impl MemoryManager {
     pub unsafe fn new(
         phys_mem_offset: VirtAddr,
@@ -108,7 +115,7 @@ impl MemoryManager {
     //     Ok(())
     // }
 
-    pub fn alloc_user_stack(&mut self, pml4: PhysFrame, entry: u64) -> VirtAddr {
+    pub fn alloc_user_stack(&mut self, pml4: PhysFrame, entry: u64, phdr: u64, phent:u64, phnum: u64) -> VirtAddr {
         // println!("Allocating user stack");
         let mut mapper = unsafe { self.mapper_for(pml4) };
         
@@ -134,7 +141,7 @@ impl MemoryManager {
         let old = Cr3::read().0;
         unsafe { Cr3::write(pml4, Cr3Flags::empty()) };
 
-        let rsp = unsafe { VirtAddr::new(build_user_stack(stack_top.as_u64(), entry, 0, 0, 0)) };// fix me
+        let rsp = unsafe { VirtAddr::new(build_user_stack(stack_top.as_u64(), entry, phdr, phent, phnum)) };// fix me
 
         unsafe { Cr3::write(old, Cr3Flags::empty()) };
 
@@ -296,56 +303,49 @@ impl MemoryManager {
         &mut self,
         pml4: PhysFrame,
         elf_bytes: &[u8],
-    ) -> u64 {
+    ) -> LoadedElf {
         let mut aligned = Vec::with_capacity(elf_bytes.len());
         aligned.extend_from_slice(elf_bytes);
 
         let elf = ElfFile::new(aligned.as_slice()).expect("Invalid ELF");
+        println!("panics before here");
 
-        let min_vaddr = elf.program_iter()
-            .filter_map(|ph| {
-                if let Ok(Type::Load) = ph.get_type() {
-                    Some(ph.virtual_addr())
-                } else {
-                    None
-                }
-            })
-            .min()
-            .expect("No loadable segments");
+        let is_pie = matches!(
+            elf.header.pt2.type_().as_type(),
+            xmas_elf::header::Type::SharedObject
+        );
 
-        let load_bias = 0;//maybe fix later??
+        let load_bias: u64 = if is_pie { 0x0000_0040_0000_0000 } else { 0 };
 
-        let entry = elf.header.pt2.entry_point() + load_bias;
-
-        let old = Cr3::read().0;
-        unsafe { Cr3::write(pml4, Cr3Flags::empty()) };
+        let old_cr3 = Cr3::read().0;
+        unsafe { Cr3::write(pml4, Cr3Flags::empty()); }
 
         let mut mapper = unsafe { self.mapper_for(pml4) };
 
-        for ph in elf.program_iter() {// iterate through program headers
+        for ph in elf.program_iter() {
             if let Ok(Type::Load) = ph.get_type() {
                 self.load_segment(&mut mapper, elf_bytes, ph, load_bias);
             }
         }
 
-        unsafe { Cr3::write(old, Cr3Flags::empty()) };
+        unsafe { Cr3::write(old_cr3, Cr3Flags::empty()) };
 
-        // println!("ELF entry: {:#x}", elf.header.pt2.entry_point());
-        // println!("Load bias: {:#x}", load_bias);
-        // println!("Final entry: {:#x}", entry);
+        let phdr = elf.program_iter()
+            .find(|ph| matches!(ph.get_type(), Ok(Type::Phdr)))
+            .map(|ph| ph.virtual_addr() + load_bias)
+            .unwrap_or_else(|| {
+                let first_load = elf.program_iter()
+                    .find(|ph| matches!(ph.get_type(), Ok(Type::Load)))
+                    .expect("no LOAD segment");
+                load_bias + first_load.virtual_addr() - first_load.offset() + elf.header.pt2.ph_offset()
+            });
 
-        // unsafe { Cr3::write(pml4, Cr3Flags::empty()) };
-
-        // println!(
-        //     "translate 0x402000 = {:?}",
-        //     mapper.translate_addr(VirtAddr::new(0x402000))
-        // );
-
-        // unsafe { Cr3::write(old, Cr3Flags::empty()) };
-
-        // loop {}
-
-        entry
+        LoadedElf {
+            entry: elf.header.pt2.entry_point() + load_bias,
+            phdr,
+            phent: elf.header.pt2.ph_entry_size() as u64,
+            phnum: elf.header.pt2.ph_count() as u64,
+        }
     }
 
     fn load_segment(

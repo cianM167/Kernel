@@ -1,5 +1,7 @@
 #include <stdio.h>
 // #include <stdlib.h>
+// clang --target=x86_64-linux-musl -static -no-pie -fno-pie hello_world.c -o hello_world.elf
+// for musl compilation 
 
 int main() {
     printf("Hello from glibc!\n");

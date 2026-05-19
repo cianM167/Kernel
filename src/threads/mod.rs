@@ -1,5 +1,5 @@
 use x86_64::{VirtAddr, structures::paging::PhysFrame};
-use crate::{allocator::with_memory};
+use crate::{allocator::with_memory, println};
 
 pub mod scheduler;
 
@@ -7,7 +7,7 @@ pub mod scheduler;
 // o.o
 //\   /
 // | |
-pub static USER_PROG: &[u8] = include_bytes!("../../user_programs/ferris_say.elf");// ignore how awful the path is
+pub static USER_PROG: &[u8] = include_bytes!("../../user_programs/hello_world.elf");// ignore how awful the path is
 
 pub struct Thread {
     pub context: Context,
@@ -29,7 +29,7 @@ impl Thread {
                 let pml4_frame = memory.new_address_space();
                 // memory.map_user_pages(pml4_frame).expect("shat the bed");
                 // memory.map_user_code(pml4_frame, VirtAddr::new(USER_CODE_START)).expect("shat þe bed");
-                let entry = memory.load_elf(pml4_frame, USER_PROG);
+                let loaded_elf = memory.load_elf(pml4_frame, USER_PROG);
 
                 // let old = Cr3::read().0;
 
@@ -43,9 +43,11 @@ impl Thread {
                 //     Cr3::write(old, Cr3Flags::empty());
                 // }
                 // println!("about to alloc user stack");
-                let stack_top = memory.alloc_user_stack(pml4_frame, entry);
+                let stack_top = memory.alloc_user_stack(pml4_frame, loaded_elf.entry, loaded_elf.phdr, loaded_elf.phent, loaded_elf.phnum);
 
-                (pml4_frame, stack_top, entry, kernel_stack_top)
+                println!("AT_PHDR:  {:#x}", loaded_elf.phdr);
+
+                (pml4_frame, stack_top, loaded_elf.entry, kernel_stack_top)
             });
 
         let context = Context::new_user(entry, stack_top);

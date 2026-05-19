@@ -156,7 +156,8 @@ pub fn schedule() {
                 //     debug_walk(VirtAddr::new(new_ctx.rsp - 8), memory.phys_mem_offset);
                 // });
 
-                set_hw_breakpoint(entry);
+                // set_hw_breakpoint(entry);
+                // println!("entry point before prog start:{:#x}", entry);
 
                 enter_user_mode(entry, rsp);
             }
