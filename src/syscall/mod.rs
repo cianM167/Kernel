@@ -49,7 +49,7 @@ pub fn init_syscalls(syscall_entry: u64) {
 
         Msr::new(IA32_LSTAR).write(syscall_entry);
 
-        Msr::new(IA32_FMASK).write(0);// allow for interrupts pray this doesnt break anything
+        Msr::new(IA32_FMASK).write(0x200);// allow for interrupts pray this doesnt break anything
     }
 }
 
