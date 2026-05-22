@@ -135,17 +135,24 @@ pub fn schedule() {
                 // switch_context(old_ctx, new_ctx)
             }
             None => {         
-                // println!("entry:  {:#x}", entry);
-                // println!("rsp:    {:#x}", rsp);
-                // println!("kstack: {:#x}", kstack);
-                // println!("frame:  {:#x}", frame.start_address());
-
                 Cr3::write(frame, Cr3Flags::empty());
                 println!("trying to switch to user mode");
 
                 set_kernel_stack(kstack.as_u64());
 
                 set_rsp0(kstack);
+
+                // clear hardware breakpoints before entry
+
+                core::arch::asm!(
+                    "mov dr7, {zero}",
+                    "mov dr0, {zero}",
+                    "mov dr1, {zero}",
+                    "mov dr2, {zero}",
+                    "mov dr3, {zero}",
+                    "mov dr6, {zero}",
+                    zero = in(reg) 0u64,
+                );
 
                 // unsafe {
                 //     *((new_ctx.rsp - 8) as *mut u64) = 0xdeadbeef;
@@ -156,8 +163,13 @@ pub fn schedule() {
                 //     debug_walk(VirtAddr::new(new_ctx.rsp - 8), memory.phys_mem_offset);
                 // });
 
-                // set_hw_breakpoint(entry);
+                // set_hw_breakpoint(0);
                 // println!("entry point before prog start:{:#x}", entry);
+
+                println!("entry:  {:#x}", entry);
+                println!("rsp:    {:#x}", rsp);
+                println!("kstack: {:#x}", kstack);
+                println!("frame:  {:#x}", frame.start_address());
 
                 enter_user_mode(entry, rsp);
             }

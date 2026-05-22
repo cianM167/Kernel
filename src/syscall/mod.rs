@@ -78,20 +78,34 @@ pub extern "C" fn syscall_entry() {
             "push rcx",
             "push r11",
 
-            // preserve original registers first
-            "mov r12, rdi",  // save arg1 before we clobber rdi
-            "mov r13, rsi",  // save arg2
-            "mov r14, rdx",  // save arg3
-            "mov r15, r10",  // save arg4 (r10 on Linux ABI)
+            // Save callee registers
+            "push rbp",
+            "push rbx",
+            "push r12",
+            "push r13",
+            "push r14",
+            "push r15",
 
-            "mov rdi, rax",  // num
-            "mov rsi, r12",  // arg1
-            "mov rdx, r13",  // arg2
-            "mov rcx, r14",  // arg3
-            "mov r8,  r15",  // arg4
+            "sub rsp, 8",
+            "push r9",
+
+            "mov r9, r8",
+            "mov r8, r10",
+            "mov rcx, rdx",
+            "mov rdx, rsi",
+            "mov rsi, rdi", 
+            "mov rdi, rax", 
 
             "call {handler}",
 
+            "pop r15",
+            "pop r14",
+            "pop r13",
+            "pop r12",
+            "pop rbx",
+            "pop rbp",
+
+            
             "pop r11",
             "pop rcx",
 

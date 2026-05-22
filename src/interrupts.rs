@@ -171,7 +171,20 @@ extern "x86-interrupt" fn unknown_exception_no_error(stack_frame: InterruptStack
 extern "x86-interrupt" fn debug_handler(
     mut stack_frame: InterruptStackFrame,
 ) {
-    println!("im stopped");
+    let dr6: u64;
+    unsafe { core::arch::asm!("mov {}, dr6", out(reg) dr6) };
+
+    println!("=== #DB ===");
+    println!("{:#?}", stack_frame);
+
+    // DR6 bit 14 (BS) = single-step (TF was set)
+    // DR6 bit 0-3    = hardware breakpoint DR0-DR3 matched
+    if dr6 & (1 << 14) != 0 { println!("cause: single-step (TF)"); }
+    if dr6 & 0xF       != 0 { println!("cause: hardware breakpoint"); }
+
+    // Clear DR6 — required, otherwise #DB keeps firing
+    unsafe { core::arch::asm!("mov dr6, {}", in(reg) 0u64) };
+
     hlt_loop();
 }
 

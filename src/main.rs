@@ -11,6 +11,11 @@
 // run in qemu
 // qemu-system-x86_64 -drive format=raw,file=target/x86_64-meowl_os/release/bootimage-meowl.bin
 
+// This is my kernel welcome
+// please forgive the poor documentation
+// this kernel is built of hopes dreams and
+// https://www.youtube.com/watch?v=lpc1lEJ-SRc
+
 use core::{panic::PanicInfo, arch::asm};
 
 use bootloader::{BootInfo, entry_point};

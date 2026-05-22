@@ -149,7 +149,7 @@ impl MemoryManager {
     }
 
     pub fn alloc_kernel_stack(&mut self) -> VirtAddr {
-        const STACK_SIZE: usize = 4096 * 4;
+        const STACK_SIZE: usize = 4096 * 64;
 
         // pick a high kernel address
         static mut NEXT_STACK: u64 = 0xffff_ffff_9000_0000;
