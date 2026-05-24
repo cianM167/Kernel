@@ -98,13 +98,14 @@ pub extern "C" fn syscall_entry() {
 
             "call {handler}",
 
+            // "add rsp, 16",
+            "pop r9",
             "pop r15",
             "pop r14",
             "pop r13",
             "pop r12",
             "pop rbx",
             "pop rbp",
-
             
             "pop r11",
             "pop rcx",

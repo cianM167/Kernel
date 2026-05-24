@@ -119,7 +119,7 @@ impl MemoryManager {
         // println!("Allocating user stack");
         let mut mapper = unsafe { self.mapper_for(pml4) };
         
-        const STACK_PAGES: usize = 4;
+        const STACK_PAGES: usize = 64;
 
         let stack_top = VirtAddr::new(0x0000_7FFF_FFFF_F000);
         let stack_start = stack_top - (STACK_PAGES as u64 * 4096);
@@ -308,7 +308,7 @@ impl MemoryManager {
         aligned.extend_from_slice(elf_bytes);
 
         let elf = ElfFile::new(aligned.as_slice()).expect("Invalid ELF");
-        println!("panics before here");
+        // println!("panics before here");
 
         let is_pie = matches!(
             elf.header.pt2.type_().as_type(),
@@ -516,7 +516,7 @@ pub unsafe fn build_user_stack(
         push(&mut sp, phent);// AT_PHENT
         push(&mut sp, 4);
 
-        push(&mut sp, phnum);// AT_PHNM
+        push(&mut sp, phnum);// AT_PHNuM
         push(&mut sp, 5);
 
         push(&mut sp, 0);// envp
