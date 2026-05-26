@@ -1,6 +1,8 @@
+use core::ptr;
+
 use alloc::vec::Vec;
 use bootloader::bootinfo::MemoryMap;
-use x86_64::{PhysAddr, VirtAddr, registers::control::{Cr3, Cr3Flags}, structures::paging::{FrameAllocator, Mapper, OffsetPageTable, Page, PageTable, PageTableFlags, PhysFrame, Size4KiB, Translate, frame, mapper::MapToError}};
+use x86_64::{PhysAddr, VirtAddr, registers::{control::{Cr3, Cr3Flags}, model_specific::Msr}, structures::paging::{FrameAllocator, Mapper, OffsetPageTable, Page, PageTable, PageTableFlags, PhysFrame, Size4KiB, Translate, frame, mapper::MapToError}};
 use xmas_elf::{ElfFile, program::{ProgramHeader, Type}};
 
 use crate::{MEMORY, allocator::{bump::{Locked}, fixed_size_block::FixedSizeBlockAllocator}, memory::{self, BootInfoFrameAllocator, active_level_4_table}, println};
@@ -29,11 +31,18 @@ pub struct MemoryManager {
 }
 
 pub struct LoadedElf {
-        pub entry: u64,
-        pub phdr: u64,
-        pub phent: u64,
-        pub phnum: u64,
-    }
+    pub entry: u64,
+    pub phdr: u64,
+    pub phent: u64,
+    pub phnum: u64,
+}
+
+pub struct TlsInfo {
+    pub template_vaddr: u64,
+    pub file_size: u64,
+    pub mem_size: u64,
+    pub align: u64,
+}
 
 impl MemoryManager {
     pub unsafe fn new(
@@ -315,7 +324,7 @@ impl MemoryManager {
             xmas_elf::header::Type::SharedObject
         );
 
-        let load_bias: u64 = if is_pie { 0x0000_0040_0000_0000 } else { 0 };
+        let load_bias: u64 = if is_pie { 0x0000_0000_000_0000 } else { 0 };
 
         let old_cr3 = Cr3::read().0;
         unsafe { Cr3::write(pml4, Cr3Flags::empty()); }
@@ -409,6 +418,68 @@ impl MemoryManager {
             }
         }
     }
+
+    pub fn setup_user_tls(
+        &mut self,
+        pml4: PhysFrame,
+        tls: Option<&TlsInfo>,
+    ) -> u64 {
+        const TCB_SIZE: u64 = 4096;
+        const TLS_VA: u64 = 0x0000_0001_0000_0000;
+
+        let (data_size, align) = tls
+            .map(|t| (t.mem_size, t.align.max(8)))
+            .unwrap_or((0, 8));
+
+        // laying out tcb
+        let data_padded = (data_size + align - 1) & !(align - 1);
+        let total = data_padded + TCB_SIZE;
+        let pages = (total + 0xFFF) / 0x100 + 1;
+
+        let flags = PageTableFlags::PRESENT
+            | PageTableFlags::WRITABLE
+            | PageTableFlags::USER_ACCESSIBLE
+            | PageTableFlags::NO_EXECUTE;
+
+        let mut mapper = unsafe { self.mapper_for(pml4) };
+        for i in 0..pages {
+            let page = Page::containing_address(VirtAddr::new(TLS_VA + i * 0x1000));
+            if mapper.translate_page(page).is_err() {
+                self.alloc_page(page, flags, &mut mapper).unwrap();
+            }
+        }
+
+        let old_cr3 = Cr3::read().0;
+        unsafe { Cr3::write(pml4, Cr3Flags::empty()); }
+
+        // zero the memory
+        unsafe {
+            ptr::write_bytes(TLS_VA as *mut u8, 0, (pages * 0x1000) as usize);
+        }
+
+        // copy in data from binary
+        if let Some(t) = tls {
+            if t.file_size > 0 {
+                unsafe {
+                    ptr::copy_nonoverlapping(
+                        t.template_vaddr as *const u8, 
+                        TLS_VA as *mut u8, 
+                        t.file_size as usize,
+                    );
+                }
+            }
+        }
+
+        let tcb = TLS_VA + data_padded;
+
+        unsafe { *(tcb as *mut u64) = tcb; }
+
+        unsafe { Cr3::write(old_cr3, Cr3Flags::empty()); }
+
+        unsafe { Msr::new(0xC0000100).write(tcb); }
+
+        tcb
+    }
 }
 
 pub fn debug_walk(addr: VirtAddr, phys_mem_offset: VirtAddr) {
@@ -497,6 +568,8 @@ pub unsafe fn build_user_stack(
 
     unsafe {
         //AUKV (Key value pairs)
+        // value 
+        // key
 
         push(&mut sp, 0);// AT_NULL
         push(&mut sp, 0);

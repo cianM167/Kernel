@@ -71,9 +71,6 @@ pub extern "C" fn syscall_entry() {
             // load kernel RSP from CPU local
             "mov rsp, qword ptr gs:[8]",
 
-            // align stack
-            "and rsp, -16",
-
             // save return state
             "push rcx",
             "push r11",
@@ -86,9 +83,6 @@ pub extern "C" fn syscall_entry() {
             "push r14",
             "push r15",
 
-            "sub rsp, 8",
-            "push r9",
-
             "mov r9, r8",
             "mov r8, r10",
             "mov rcx, rdx",
@@ -96,10 +90,11 @@ pub extern "C" fn syscall_entry() {
             "mov rsi, rdi", 
             "mov rdi, rax", 
 
+            "sub rsp, 8",
             "call {handler}",
+            "add rsp, 8",
 
             // "add rsp, 16",
-            "pop r9",
             "pop r15",
             "pop r14",
             "pop r13",
@@ -237,7 +232,7 @@ fn sys_brk(new_break: u64) -> u64 {
         let address_space = thread.address_space;
 
         let old_end = thread.heap_end;
-        drop(thread);
+        // drop(thread);
         drop(scheduler);
 
         let flags = PageTableFlags::PRESENT
