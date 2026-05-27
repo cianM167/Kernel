@@ -35,6 +35,7 @@ pub struct LoadedElf {
     pub phdr: u64,
     pub phent: u64,
     pub phnum: u64,
+    pub tls: Option<TlsInfo>,
 }
 
 pub struct TlsInfo {
@@ -349,11 +350,21 @@ impl MemoryManager {
                 load_bias + first_load.virtual_addr() - first_load.offset() + elf.header.pt2.ph_offset()
             });
 
+        let tls = elf.program_iter()
+            .find(|ph| matches!(ph.get_type(), Ok(Type::Tls)))
+            .map(|ph| TlsInfo {
+                template_vaddr: ph.virtual_addr() + load_bias,
+                file_size: ph.file_size(),
+                mem_size: ph.mem_size(),
+                align: ph.align().max(8)
+            });
+
         LoadedElf {
             entry: elf.header.pt2.entry_point() + load_bias,
             phdr,
             phent: elf.header.pt2.ph_entry_size() as u64,
             phnum: elf.header.pt2.ph_count() as u64,
+            tls,
         }
     }
 

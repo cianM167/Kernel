@@ -7,7 +7,7 @@ pub mod scheduler;
 // o.o
 //\   /
 // | |
-pub static USER_PROG: &[u8] = include_bytes!("../../user_programs/hello_world.elf");// ignore how awful the path is
+pub static USER_PROG: &[u8] = include_bytes!("../../user_programs/ferris_say.elf");// ignore how awful the path is
 
 pub struct Thread {
     pub context: Context,
@@ -44,6 +44,8 @@ impl Thread {
                 // }
                 // println!("about to alloc user stack");
                 let stack_top = memory.alloc_user_stack(pml4_frame, loaded_elf.entry, loaded_elf.phdr, loaded_elf.phent, loaded_elf.phnum);
+
+                memory.setup_user_tls(pml4_frame, loaded_elf.tls.as_ref());
 
                 println!("AT_PHDR:  {:#x}", loaded_elf.phdr);
 

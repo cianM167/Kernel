@@ -1,7 +1,7 @@
 use alloc::{collections::VecDeque, vec::Vec};
 use lazy_static::lazy_static;
 use spin::Mutex;
-use x86_64::{VirtAddr, registers::control::{Cr3, Cr3Flags}, structures::paging::PhysFrame};
+use x86_64::{VirtAddr, registers::{control::{Cr3, Cr3Flags}, model_specific::Msr}, structures::paging::PhysFrame};
 
 use crate::{allocator::{KERNEL_OFFSET, debug_walk, with_memory}, gdt::{GDT, TSS, set_rsp0}, println, syscall::CPU_LOCAL, threads::{self, Context, Thread, ThreadState}};
 
@@ -114,11 +114,12 @@ pub fn schedule() {
         let rsp = thread.context.rsp;
         let frame = thread.address_space;
         let kstack = thread.kernel_stack_top;
+        let tcb_addr = thread.tcb_addr;
 
-        (current_id, next_id, entry, rsp, frame, kstack)
+        (current_id, next_id, entry, rsp, frame, kstack, tcb_addr)
     };
 
-    let (current_id, next_id, entry, rsp, frame, kstack) = action;
+    let (current_id, next_id, entry, rsp, frame, kstack, tcb_addr) = action;
 
     unsafe {
         match current_id {
@@ -141,6 +142,8 @@ pub fn schedule() {
                 set_kernel_stack(kstack.as_u64());
 
                 set_rsp0(kstack);
+
+                unsafe { Msr::new(0xC0000100).write(thread.tcb_addr); }
 
                 // clear hardware breakpoints before entry
 
