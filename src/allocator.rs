@@ -30,6 +30,21 @@ pub struct MemoryManager {
     pub frame_allocator: BootInfoFrameAllocator,
 }
 
+#[repr(C)]
+struct MuslTlb {
+    // fs 0x0
+    self_ptr: u64,
+
+    // fs 0x8
+    dtv: u64,
+
+    // fs 0x10
+    canary: u64,
+
+    // fs 0x18
+    pthread_ptr: u64,
+}
+
 pub struct LoadedElf {
     pub entry: u64,
     pub phdr: u64,
@@ -445,7 +460,7 @@ impl MemoryManager {
         // laying out tcb
         let data_padded = (data_size + align - 1) & !(align - 1);
         let total = data_padded + TCB_SIZE;
-        let pages = (total + 0xFFF) / 0x100 + 1;
+        let pages = (total + 0xFFF) / 0x1000 + 1;
 
         let flags = PageTableFlags::PRESENT
             | PageTableFlags::WRITABLE

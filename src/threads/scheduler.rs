@@ -143,7 +143,7 @@ pub fn schedule() {
 
                 set_rsp0(kstack);
 
-                unsafe { Msr::new(0xC0000100).write(thread.tcb_addr); }
+                Msr::new(0xC0000100).write(tcb_addr);
 
                 // clear hardware breakpoints before entry
 
@@ -173,6 +173,10 @@ pub fn schedule() {
                 println!("rsp:    {:#x}", rsp);
                 println!("kstack: {:#x}", kstack);
                 println!("frame:  {:#x}", frame.start_address());
+
+                unsafe { Msr::new(0xC0000100).write(tcb_addr); }
+                let fs_rb = unsafe { Msr::new(0xC0000100).read() };
+                println!("tcb={:#x}  FS_BASE after write={:#x}", tcb_addr, fs_rb);
 
                 enter_user_mode(entry, rsp);
             }

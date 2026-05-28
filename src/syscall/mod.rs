@@ -126,6 +126,7 @@ pub extern "C" fn syscall_handler(
     arg5: u64,
     arg6: u64,
 ) -> u64 {
+    println!("SYSCALL: {}", num);
     match num {
         0 => sys_read(arg1, arg2 as *mut u8, arg3),
         1 => sys_write(arg1, arg2 as * const u8, arg3),

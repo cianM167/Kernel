@@ -7,7 +7,7 @@ pub mod scheduler;
 // o.o
 //\   /
 // | |
-pub static USER_PROG: &[u8] = include_bytes!("../../user_programs/ferris_say.elf");// ignore how awful the path is
+pub static USER_PROG: &[u8] = include_bytes!("../../user_programs/hello_world.elf");// ignore how awful the path is
 
 pub struct Thread {
     pub context: Context,
@@ -18,12 +18,13 @@ pub struct Thread {
     pub heap_start: VirtAddr,
     pub heap_end: VirtAddr,
     pub mmap_top: u64,
+    pub tcb_addr: u64,
 }
 
 impl Thread {
     pub fn new(_entry: u64) -> Self {
 
-        let (address_space, stack_top, entry, kernel_stack_top) = 
+        let (address_space, stack_top, entry, kernel_stack_top, tcb_addr) = 
             with_memory(|memory| {
                 let kernel_stack_top = memory.alloc_kernel_stack();
                 let pml4_frame = memory.new_address_space();
@@ -45,11 +46,11 @@ impl Thread {
                 // println!("about to alloc user stack");
                 let stack_top = memory.alloc_user_stack(pml4_frame, loaded_elf.entry, loaded_elf.phdr, loaded_elf.phent, loaded_elf.phnum);
 
-                memory.setup_user_tls(pml4_frame, loaded_elf.tls.as_ref());
+                let tcb_addr = memory.setup_user_tls(pml4_frame, loaded_elf.tls.as_ref());
 
                 println!("AT_PHDR:  {:#x}", loaded_elf.phdr);
 
-                (pml4_frame, stack_top, loaded_elf.entry, kernel_stack_top)
+                (pml4_frame, stack_top, loaded_elf.entry, kernel_stack_top, tcb_addr)
             });
 
         let context = Context::new_user(entry, stack_top);
@@ -66,6 +67,7 @@ impl Thread {
             heap_start,
             heap_end: heap_start,
             mmap_top: 0x0000_0000_4000_0000,
+            tcb_addr,
         }
     }
 }
