@@ -178,6 +178,8 @@ pub fn schedule() {
                 let fs_rb = unsafe { Msr::new(0xC0000100).read() };
                 println!("tcb={:#x}  FS_BASE after write={:#x}", tcb_addr, fs_rb);
 
+                assert!(rsp % 16 == 8);
+
                 enter_user_mode(entry, rsp);
             }
         }

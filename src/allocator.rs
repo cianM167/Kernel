@@ -43,6 +43,8 @@ struct MuslTlb {
 
     // fs 0x18
     pthread_ptr: u64,
+
+    padding: [u8; 0x2000],
 }
 
 pub struct LoadedElf {
@@ -59,6 +61,9 @@ pub struct TlsInfo {
     pub mem_size: u64,
     pub align: u64,
 }
+
+const TLS_VA: u64 = 0x0000_7FFF_FFC0_0000;
+const TCB_SIZE: u64 = 0x4000;
 
 impl MemoryManager {
     pub unsafe fn new(
@@ -450,61 +455,78 @@ impl MemoryManager {
         pml4: PhysFrame,
         tls: Option<&TlsInfo>,
     ) -> u64 {
-        const TCB_SIZE: u64 = 4096;
-        const TLS_VA: u64 = 0x0000_0001_0000_0000;
+        let (tls_mem_size, tls_align) = tls
+            .map(|t| (t.mem_size, t.align.max(16)))
+            .unwrap_or((0, 16));
 
-        let (data_size, align) = tls
-            .map(|t| (t.mem_size, t.align.max(8)))
-            .unwrap_or((0, 8));
+        let tls_data_size = (tls_mem_size + tls_align - 1) & !(tls_align - 1);
 
-        // laying out tcb
-        let data_padded = (data_size + align - 1) & !(align - 1);
-        let total = data_padded + TCB_SIZE;
-        let pages = (total + 0xFFF) / 0x1000 + 1;
+        let total_size = tls_data_size + TCB_SIZE;
 
-        let flags = PageTableFlags::PRESENT
+        let pages = (total_size + 0xFFF) / 0x1000;
+
+        let flags = 
+            PageTableFlags::PRESENT
             | PageTableFlags::WRITABLE
             | PageTableFlags::USER_ACCESSIBLE
             | PageTableFlags::NO_EXECUTE;
 
         let mut mapper = unsafe { self.mapper_for(pml4) };
+
         for i in 0..pages {
-            let page = Page::containing_address(VirtAddr::new(TLS_VA + i * 0x1000));
+            let addr = VirtAddr::new(TLS_VA + i * 0x1000);
+
+            let page = Page::containing_address(addr);
+
             if mapper.translate_page(page).is_err() {
-                self.alloc_page(page, flags, &mut mapper).unwrap();
+                self.alloc_page(page, flags, &mut mapper)
+                    .expect("TLS alloc failed");
             }
         }
 
         let old_cr3 = Cr3::read().0;
-        unsafe { Cr3::write(pml4, Cr3Flags::empty()); }
 
-        // zero the memory
         unsafe {
-            ptr::write_bytes(TLS_VA as *mut u8, 0, (pages * 0x1000) as usize);
+            Cr3::write(pml4, Cr3Flags::empty());
         }
 
-        // copy in data from binary
-        if let Some(t) = tls {
-            if t.file_size > 0 {
+        unsafe {
+            ptr::write_bytes(
+                TLS_VA as *mut u8, 
+                0, 
+                (pages * 0x1000)as usize
+            );
+        }
+
+        if let Some(tls_info) = tls {
+            if tls_info.file_size > 0 {
                 unsafe {
                     ptr::copy_nonoverlapping(
-                        t.template_vaddr as *const u8, 
+                        tls_info.template_vaddr as *const u8, 
                         TLS_VA as *mut u8, 
-                        t.file_size as usize,
+                        tls_info.file_size as usize
                     );
                 }
             }
         }
 
-        let tcb = TLS_VA + data_padded;
+        let tcb_addr = TLS_VA + tls_data_size;
 
-        unsafe { *(tcb as *mut u64) = tcb; }
+        let tcb = tcb_addr as *mut MuslTlb;
+
+        unsafe {
+            (*tcb).self_ptr = tcb_addr;
+
+            (*tcb).dtv = 0;
+
+            (*tcb).canary = 0x1234567812345678;
+
+            (*tcb).pthread_ptr = tcb_addr;
+        }
 
         unsafe { Cr3::write(old_cr3, Cr3Flags::empty()); }
 
-        unsafe { Msr::new(0xC0000100).write(tcb); }
-
-        tcb
+        tcb_addr
     }
 }
 
@@ -558,78 +580,55 @@ fn align_up(addr: usize, align: usize) -> usize {
 }
 
 pub unsafe fn build_user_stack(
-    stack_top: u64,
+    mut sp: u64,
     entry: u64,
     phdr: u64,
     phent:u64,
     phnum: u64,
 ) -> u64 {// recreating linux abi and arguments
-    let mut sp = stack_top;
-
-    // Write program name
     let prog = b"prog\0";
 
     sp -= prog.len() as u64;
     let prog_ptr = sp;
-
     unsafe {
-        core::ptr::copy_nonoverlapping(
-            prog.as_ptr(), 
-            prog_ptr as *mut u8, 
-            prog.len(),
-        );
+        ptr::copy_nonoverlapping(prog.as_ptr(), prog_ptr as *mut u8, prog.len());
     }
 
-    // AT_RANDOM (16 bytes)
     sp -= 16;
+    sp &= !0xF;
     let random_ptr = sp;
-
     unsafe {
-        *(random_ptr as *mut [u8; 16]) = [0u8; 16];// bad fixme
+        ptr::write_bytes(random_ptr as *mut u8, 0x41, 16);
     }
 
-    sp &= !0xF;// realigning after writing name
-    // println!("SP after align: {:#x}", sp);
-    // println!("prog_ptr: {:#x}", prog_ptr);
-
     unsafe {
-        //AUKV (Key value pairs)
-        // value 
-        // key
-
-        push(&mut sp, 0);// AT_NULL
+        // NULL terminator for envp
         push(&mut sp, 0);
 
-        push(&mut sp, random_ptr);// AT_RANDOM
-        push(&mut sp, 25);
+        // Empty envp
 
-        push(&mut sp, 4096);// AT_PAGESZ
-        push(&mut sp, 6);
+        // NULL terminator for argv
+        push(&mut sp, 0);
 
-        push(&mut sp, entry);// AT_ENTRY
-        push(&mut sp, 9);
-
-        push(&mut sp, phdr);// AT_PHDR
-        push(&mut sp, 3);
-
-        push(&mut sp, phent);// AT_PHENT
-        push(&mut sp, 4);
-
-        push(&mut sp, phnum);// AT_PHNuM
-        push(&mut sp, 5);
-
-        push(&mut sp, 0);// envp
-
-        push(&mut sp, 0);// argv
+        // argv
         push(&mut sp, prog_ptr);// argv[0]
 
-        push(&mut sp, 1);// argc
+        push(&mut sp, 1);
+
+        // aux shit
+
+        push(&mut sp, 0); push(&mut sp, 0); // AT_NULL
+
+        push(&mut sp, phnum); push(&mut sp, 5); // AT_PHNUM
+        push(&mut sp, phent); push(&mut sp, 4); // AT_PHENT
+        push(&mut sp, phdr);  push(&mut sp, 3); // AT_PHDR
+        push(&mut sp, entry); push(&mut sp, 9); // AT_ENTRY
+        push(&mut sp, 4096); push(&mut sp, 6); // AT_PAGESZ
+        push(&mut sp, random_ptr); push(&mut sp, 25); // AT_RANDOM
     }
 
-    if sp % 16 != 8 {
-        sp -= 8;
-    }
-
+    sp &= !0xF;
+    
     sp
 }
 
