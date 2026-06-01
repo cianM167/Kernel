@@ -8,7 +8,7 @@ user_programs/mini_c_stdlib
 ```
 
 You can include these using the headers:
-```
+```C
 #include "mini_c_stdlib/syscalls.h"
 #include "mini_c_stdlib/malloc.h"
 ```
